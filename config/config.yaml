@@ -1,0 +1,10 @@
+version: 0.0.2
+config:
+    project:
+        name: openrank-tee
+        version: 0.1.0
+        context: devnet
+        project_uuid: 1d68ad65-ead4-4743-b5c0-749ff3f04d25
+        telemetry_enabled: false
+        templateBaseUrl: https://github.com/Layr-Labs/tee-avs-template
+        templateVersion: master

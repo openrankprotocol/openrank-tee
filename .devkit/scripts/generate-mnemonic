@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -e
+
+# source in helper functions
+source "$( dirname "${BASH_SOURCE[0]}" )/helpers/helpers.sh"
+
+MNEMONIC_FILE="mnemonic.txt"
+
+# Check if mnemonic already exists
+if [ -f "$MNEMONIC_FILE" ]; then
+    log "Mnemonic already exists in $MNEMONIC_FILE"
+    log "To regenerate, delete the existing file and run this script again"
+    exit 0
+fi
+
+# Generate a secure mnemonic using Foundry's cast
+log "Generating secure mnemonic using cast..."
+
+# Generate wallet info and save with proper format
+WALLET_OUTPUT=$(cast wallet new-mnemonic)
+echo "# TEE AVS Local Testing Mnemonic:" > "$MNEMONIC_FILE"
+echo "$(echo "$WALLET_OUTPUT" | grep -A 1 'Phrase:' | tail -1)" >> "$MNEMONIC_FILE"
+echo "# Address (0): $(echo "$WALLET_OUTPUT" | grep 'Address:' | awk '{print $NF}')" >> "$MNEMONIC_FILE"
+echo "# Private Key (0): $(echo "$WALLET_OUTPUT" | grep 'Private key:' | awk '{print $NF}')" >> "$MNEMONIC_FILE"
+
+log "Mnemonic generated and saved to $MNEMONIC_FILE for local testing"
+log "Keep this mnemonic secure - it cannot be recovered if lost!"

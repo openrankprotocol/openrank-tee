@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -e
+
+# source in helper functions
+source "$( dirname "${BASH_SOURCE[0]}" )/helpers/helpers.sh"
+
+# Return hardcoded JSON
+RESULT='{
+  "operator_sets": [
+    {
+      "operator_set_id": 0,
+      "curve_type": "ECDSA", 
+      "strategies": []
+    }
+  ]
+}'
+
+# Print the hardcoded JSON to stdout
+echo "$RESULT" | jq -c . 

@@ -1,0 +1,2 @@
+apis:
+  coordinator: "http://localhost:8080"

@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -e
+
+source "$( dirname "${BASH_SOURCE[0]}" )/helpers/helpers.sh"
+
+# Check for required tools
+ensureAge
+ensureOras
+ensureCurl
+ensureYq
+ensureJq
+
+# Parse command line arguments
+if [ "$1" != "--image" ] || [ -z "$2" ] || [ "$3" != "--tag" ] || [ -z "$4" ] || [ -z "$5" ]; then
+    log "Error: Invalid arguments"
+    log "Usage: $0 --image <image_name> --tag <tag> <context_json>"
+    exit 1
+fi
+
+IMAGE_NAME="$2"
+TAG="$4"
+CONTEXT="$5"
+
+# Parse the context JSON (required)
+ENVIRONMENT=$(echo "$CONTEXT" | jq -r '.context.name')
+AVS_ADDRESS=$(echo "$CONTEXT" | jq -r '.context.avs.address')
+
+# Validate environment was extracted
+if [ -z "$ENVIRONMENT" ] || [ "$ENVIRONMENT" = "null" ]; then
+    log "Error: Failed to extract environment name from context"
+    exit 1
+fi
+
+log "Building for environment: $ENVIRONMENT"
+
+# Build contracts
+if [ -d "contracts" ]; then
+    log "Building contracts..."
+    (cd contracts && forge build) >&2
+else
+    log "No contracts directory found, skipping contract build"
+fi
+
+# Get AGE_RECIPIENT
+if [ "$ENVIRONMENT" = "devnet" ]; then
+    # Use hardcoded devnet value
+    AGE_RECIPIENT="age102rz055sfxf9e0aqndzws9ekl8cum0lzd4x25k6u7qgjrrdpfdmqe6zcd4"
+    log "Using devnet AGE_RECIPIENT"
+else
+    # Check if AVS address was provided in context
+    if [ -z "$AVS_ADDRESS" ] || [ "$AVS_ADDRESS" = "null" ]; then
+        log "Warning: Contracts built, but AVS image cannot be created without encryption keys"
+        log "Deploy your AVS first: 'devkit avs deploy contracts l1 --context=$ENVIRONMENT'"
+        
+        # Return empty artifact
+        echo '{"artifact":{"component":"compose","artifactId":""}}' | jq -c .
+        exit 0
+    fi
+
+    # Check if the template-specific TEE environment YAML file exists
+    ENVIRONMENT_YAML_FILE=".compute-tee/context/${ENVIRONMENT}.yaml"
+    if [ ! -f "$ENVIRONMENT_YAML_FILE" ]; then
+        log "Error: TEE environment file ${ENVIRONMENT_YAML_FILE} does not exist"
+        exit 1
+    fi
+
+    # Fetch from coordinator API
+    COORDINATOR_URL=$(yq e '.apis.coordinator' "$ENVIRONMENT_YAML_FILE")
+    if [ -z "$COORDINATOR_URL" ]; then
+        log "Error: No coordinator URL found in ${ENVIRONMENT_YAML_FILE}"
+        exit 1
+    fi
+    
+    # Construct the full API URL
+    API_URL="${COORDINATOR_URL}/avs/${AVS_ADDRESS}/keys"
+    
+    log "Fetching AGE_RECIPIENT from coordinator at ${API_URL}"
+    RESPONSE=$(curl -s "${API_URL}" || true)
+    
+    if [ -z "$RESPONSE" ]; then
+        log "Error: Failed to fetch data from coordinator API at ${API_URL}"
+        exit 1
+    fi
+    
+    AGE_RECIPIENT=$(echo "$RESPONSE" | jq -r '.public_key' 2>/dev/null || true)
+    
+    if [ -z "$AGE_RECIPIENT" ] || [ "$AGE_RECIPIENT" = "null" ]; then
+        log "Error: Failed to extract public_key from coordinator response"
+        log "Response: $RESPONSE"
+        exit 1
+    fi
+    
+    log "Retrieved AGE_RECIPIENT: ${AGE_RECIPIENT}"
+fi
+
+if [ -z "$AGE_RECIPIENT" ]; then
+    log "Error: AGE_RECIPIENT must be set"
+    exit 1
+fi
+
+# Validate files exist
+for file in docker-compose.yml .env.public .env.private; do
+    if [ ! -f "$file" ]; then
+        log "Error: $file not found!"
+        exit 1
+    fi
+done
+
+# Encrypt .env.private using age
+log "Encrypting .env.private..."
+age -r "$AGE_RECIPIENT" -o .env.private.encrypted .env.private
+
+# Generate tag and artifact info
+TIMESTAMP=$(date +%s)
+GIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo 'no-git')
+TAG="${TIMESTAMP}-${GIT_HASH}"
+ARTIFACT_REF="build/oci-artifacts:${TAG}"
+
+# Push artifact using ORAS to local OCI layout
+log "Creating artifact: $ARTIFACT_REF"
+oras push --oci-layout "$ARTIFACT_REF" \
+    docker-compose.yml \
+    .env.public \
+    .env.private.encrypted >&2
+
+# Get the manifest digest as artifact ID
+ARTIFACT_ID=$(oras manifest fetch --oci-layout "$ARTIFACT_REF" --descriptor 2>/dev/null | jq -r '.digest')
+
+# Clean up
+rm -f .env.private.encrypted
+
+log "Build complete! Artifact: $ARTIFACT_REF"
+
+# Create and output the JSON structure
+RESULT=$(jq -n \
+    --arg component "compose" \
+    --arg artifactId "$ARTIFACT_ID" \
+    '{
+        artifact: {
+            component: $component,
+            artifactId: $artifactId
+        }
+    }')
+
+# Print the JSON to stdout
+echo "$RESULT" | jq -c .

@@ -1,0 +1,16 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+remappings = [
+    "forge-std/=lib/forge-std/src/",
+    "@eigenlayer-middleware/=lib/eigenlayer-middleware/",
+    "@eigenlayer-contracts/=lib/eigenlayer-middleware/lib/eigenlayer-contracts/",
+    "@openzeppelin/=lib/eigenlayer-middleware/lib/openzeppelin-contracts/",
+    "@openzeppelin-upgrades/=lib/eigenlayer-middleware/lib/openzeppelin-contracts-upgradeable/"
+]
+
+fs_permissions = [{ access = "read", path = "script/config/" }, { access = "write", path = "script/output/" }]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
