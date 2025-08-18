@@ -31,20 +31,12 @@ interface IOpenRankManager {
         uint32 subJobId;
         bytes certificate;
         uint256 timestamp;
-        uint256 requestIndex;
     }
 
     event MetaComputeRequestEvent(uint256 indexed computeId, bytes32 jobDescriptionId);
     event MetaComputeResultEvent(uint256 indexed computeId, bytes32 commitment, bytes32 resultsId);
-    event MetaChallengeEvent(
-        uint256 indexed computeId,
-        uint32 subJobId,
-        uint256 requestIndex
-    );
+    event MetaChallengeEvent(uint256 indexed computeId, uint32 subJobId);
 
-    function setImageId(
-        uint32 _imageId
-    ) external;
     function submitMetaComputeRequest(
         bytes32 jobDescriptionId
     ) external returns (uint256 computeId);

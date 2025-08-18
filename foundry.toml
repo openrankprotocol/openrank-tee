@@ -12,7 +12,7 @@ via-ir = true
 remappings = [
     "@openzeppelin/=contracts/lib/openzeppelin-contracts/",
     "eigenlayer-middleware/=.devkit/compute-tee/contracts/lib/eigenlayer-middleware/",
-    "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/",
+    "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/src/",
 ]
 
 [fmt]

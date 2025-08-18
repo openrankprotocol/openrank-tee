@@ -74,7 +74,7 @@ contract OpenRankManager is OpenRankManagerStorage {
             computeId: computeId,
             subJobId: subJobId,
             certificate: certificate,
-            timestamp: block.timestamp,
+            timestamp: block.timestamp
         });
         metaChallenges[computeId] = challenge;
 

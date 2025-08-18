@@ -18,10 +18,4 @@ contract DeployOpenRank is Script {
         orManager = new OpenRankManager();
         vm.stopBroadcast();
     }
-
-    function testRun(address sender) public {
-        vm.startPrank(sender);
-        orManager = new OpenRankManager();
-        vm.stopPrank();
-    }
 }
