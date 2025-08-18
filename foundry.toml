@@ -1,0 +1,25 @@
+[profile.default]
+src = "contracts/src"
+out = "contracts/out"
+test = "contracts/test"
+cache_path = "contracts/cache"
+libs = ["contracts/lib"]
+fs_permissions = [{ access = "read-write", path = "./" }]
+solc = "0.8.27"
+via-ir = true
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+remappings = [
+    "@openzeppelin/=contracts/lib/openzeppelin-contracts/",
+    "eigenlayer-middleware/=.devkit/compute-tee/contracts/lib/eigenlayer-middleware/",
+    "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/",
+]
+
+[fmt]
+bracket_spacing = false
+int_types = "long"
+line_length = 100
+multiline_func_header = "params_first"
+number_underscore = "thousands"
+quote_style = "double"
+tab_width = 4
