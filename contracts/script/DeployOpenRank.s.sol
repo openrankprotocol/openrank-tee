@@ -7,15 +7,11 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 contract DeployOpenRank is Script {
-    OpenRankManager public orManager;
-
-    address initialOwner;
-
     function run() public {
-        initialOwner = msg.sender;
-
+        address initialOwner = msg.sender;
         vm.startBroadcast(initialOwner);
-        orManager = new OpenRankManager();
+        OpenRankManager orManager = new OpenRankManager();
+        console.log("OR Address: ", address(orManager));
         vm.stopBroadcast();
     }
 }

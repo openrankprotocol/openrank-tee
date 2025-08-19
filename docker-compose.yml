@@ -1,13 +1,11 @@
-# Docker Compose configuration for the randomness beacon application
 # This will be deployed and run inside a TEE with cryptographic attestation.
 
 services:
-  # Randomness beacon application
-  randomness-beacon:
-    image: saucelord/randomness-beacon@sha256:0599e3945599595125cc594274e1892255ce6ded4b3e7e402128c3855e27e44c
-    environment:
-      # Set your mnemonic here or use secrets management
-      - MNEMONIC=${MNEMONIC}
-      - RANDOMNESS_BEACON_ADDRESS=${RANDOMNESS_BEACON_ADDRESS}
-      - RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
-    restart: unless-stopped
+    openrank-challenger:
+        image: saucelord/randomness-beacon@sha256:0599e3945599595125cc594274e1892255ce6ded4b3e7e402128c3855e27e44c
+        environment:
+            # Set your mnemonic here or use secrets management
+            - MNEMONIC=${MNEMONIC}
+            - OPENRANK_MANAGER_ADDRESS=${OPENRANK_MANAGER_ADDRESS}
+            - RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+        restart: unless-stopped

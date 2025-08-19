@@ -7,3 +7,6 @@
 [submodule ".devkit/compute-tee/contracts/lib/eigenlayer-middleware"]
 	path = .devkit/compute-tee/contracts/lib/eigenlayer-middleware
 	url = https://github.com/Layr-Labs/eigenlayer-middleware
+[submodule "datasets"]
+	path = datasets
+	url = https://github.com/openrankprotocol/datasets

@@ -29,7 +29,6 @@ interface IOpenRankManager {
         address challenger;
         uint256 computeId;
         uint32 subJobId;
-        bytes certificate;
         uint256 timestamp;
     }
 
@@ -47,8 +46,7 @@ interface IOpenRankManager {
     ) external returns (bool);
     function submitMetaChallenge(
         uint256 computeId,
-        uint32 subJobId,
-        bytes memory certificate
+        uint32 subJobId
     ) external returns (bool);
     function isAllowlistedComputer(
         address computer

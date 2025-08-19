@@ -1,11 +1,11 @@
 # This will be deployed and run inside a TEE with cryptographic attestation.
 
 services:
-    openrank-challenger:
+    openrank-computer:
         network_mode: host
         build:
             context: .
-            dockerfile: app/Dockerfile
+            dockerfile: app/Dockerfile.computer
         env_file:
             - path: .env.private
               required: true

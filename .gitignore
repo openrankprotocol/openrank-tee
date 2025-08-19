@@ -10,6 +10,7 @@ devkit
 /bin/
 /out/
 build/
+target/
 *.test
 
 # Dependency directories (if you're not committing vendor)
@@ -33,6 +34,7 @@ temp_external/
 # DevKit context configurations (only devnet.yaml is indexed)
 config/contexts/**/*
 !config/contexts/devnet.yaml
+keystores/
 
 # Environment
 .env
@@ -41,4 +43,6 @@ config/contexts/**/*
 # Blockchain
 mnemonic.txt
 contracts/out
+contracts/outputs/devnet
 contracts/cache
+broadcast/**/31337
