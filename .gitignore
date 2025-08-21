@@ -46,3 +46,4 @@ contracts/out
 contracts/outputs/devnet
 contracts/cache
 broadcast/**/31337
+standard-json-input.json

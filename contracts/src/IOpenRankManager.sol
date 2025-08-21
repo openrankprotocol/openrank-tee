@@ -36,6 +36,7 @@ interface IOpenRankManager {
     event MetaComputeResultEvent(uint256 indexed computeId, bytes32 commitment, bytes32 resultsId);
     event MetaChallengeEvent(uint256 indexed computeId, uint32 subJobId);
 
+    function allowlistComputer(address computer) external;
     function submitMetaComputeRequest(
         bytes32 jobDescriptionId
     ) external returns (uint256 computeId);

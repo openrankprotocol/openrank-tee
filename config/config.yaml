@@ -8,3 +8,4 @@ config:
         telemetry_enabled: false
         templateBaseUrl: https://github.com/Layr-Labs/tee-avs-template
         templateVersion: master
+        templateLanguage: "go"

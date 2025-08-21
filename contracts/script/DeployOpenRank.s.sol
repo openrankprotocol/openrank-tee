@@ -9,8 +9,10 @@ import {Vm} from "forge-std/Vm.sol";
 contract DeployOpenRank is Script {
     function run() public {
         address initialOwner = msg.sender;
+        address computerAddress = vm.envAddress("TEE_ADDRESS");
         vm.startBroadcast(initialOwner);
         OpenRankManager orManager = new OpenRankManager();
+        orManager.allowlistComputer(computerAddress);
         console.log("OR Address: ", address(orManager));
         vm.stopBroadcast();
     }

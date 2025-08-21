@@ -2,9 +2,7 @@ mod actions;
 mod sol;
 
 use crate::actions::save_json_to_file;
-use crate::sol::OpenRankManager::{
-    MetaChallengeEvent, MetaComputeRequestEvent, MetaComputeResultEvent,
-};
+use crate::sol::OpenRankManager::{MetaComputeRequestEvent, MetaComputeResultEvent};
 use actions::{
     compute_local, download_meta, download_scores, upload_meta, upload_seed, upload_trust,
     verify_local,
@@ -217,7 +215,6 @@ async fn main() -> Result<(), AwsError> {
     let current_block = provider.get_block_number().await.unwrap();
     let manager_contract = OpenRankManager::new(manager_address, provider.clone());
 
-    // println!("current block: {}", current_block);
     let starting_block = (current_block - 10).max(0);
     match cli.method {
         Method::MetaDownloadScores {
@@ -278,25 +275,15 @@ async fn main() -> Result<(), AwsError> {
                 .to_block(BlockNumberOrTag::Latest)
                 .topic1(Uint::from_str(&compute_id).unwrap())
                 .filter;
-            let challenge_logs_filter = manager_contract_ws
-                .MetaChallengeEvent_filter()
-                .from_block(BlockNumberOrTag::Number(starting_block))
-                .to_block(BlockNumberOrTag::Latest)
-                .topic1(Uint::from_str(&compute_id).unwrap())
-                .filter;
 
             let request_logs = provider.get_logs(&request_logs_filter).await.unwrap();
             let results_logs = provider.get_logs(&results_log_filter).await.unwrap();
-            let challenge_logs = provider.get_logs(&challenge_logs_filter).await.unwrap();
 
             for log in request_logs {
                 job_metadata.set_request_tx_hash(log.transaction_hash.unwrap());
             }
             for log in results_logs {
                 job_metadata.set_results_tx_hash(log.transaction_hash.unwrap());
-            }
-            for log in challenge_logs {
-                job_metadata.set_challenge_tx_hash(log.transaction_hash.unwrap());
             }
 
             let mut meta_compute_request_stream = manager_contract_ws
@@ -309,14 +296,6 @@ async fn main() -> Result<(), AwsError> {
                 .into_stream();
             let mut meta_compute_result_stream = manager_contract_ws
                 .MetaComputeResultEvent_filter()
-                .from_block(BlockNumberOrTag::Number(current_block - 1))
-                .topic1(Uint::from_str(&compute_id).unwrap())
-                .watch()
-                .await
-                .unwrap()
-                .into_stream();
-            let mut meta_challenge_stream = manager_contract_ws
-                .MetaChallengeEvent_filter()
                 .from_block(BlockNumberOrTag::Number(current_block - 1))
                 .topic1(Uint::from_str(&compute_id).unwrap())
                 .watch()
@@ -336,13 +315,6 @@ async fn main() -> Result<(), AwsError> {
                     let (meta_result_res, log): (MetaComputeResultEvent, Log) = res.unwrap();
                     assert!(meta_result_res.computeId.to_string() == compute_id);
                     job_metadata.set_results_tx_hash(log.transaction_hash.unwrap());
-                }
-            }
-            if !job_metadata.has_challenge_tx() {
-                if let Some(res) = meta_challenge_stream.next().await {
-                    let (meta_challenge_res, log): (MetaChallengeEvent, Log) = res.unwrap();
-                    assert!(meta_challenge_res.computeId.to_string() == compute_id);
-                    job_metadata.set_challenge_tx_hash(log.transaction_hash.unwrap());
                 }
             }
 

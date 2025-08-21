@@ -12,6 +12,10 @@ contract OpenRankManager is OpenRankManagerStorage {
 
     constructor() OpenRankManagerStorage() {}
 
+    function allowlistComputer(address computer) onlyOwner external {
+        allowlistedComputers[computer] = true;
+    }
+
     // ---------------------------------------------------------------
     // Meta Jobs
     // ---------------------------------------------------------------

@@ -1,11 +1,14 @@
 # This will be deployed and run inside a TEE with cryptographic attestation.
 
 services:
-    openrank-challenger:
-        image: saucelord/randomness-beacon@sha256:0599e3945599595125cc594274e1892255ce6ded4b3e7e402128c3855e27e44c
+    openrank-computer:
+        image: lazovicff/openrank-computer@sha256:6aa3d602798a29e9f86489f089b8cee753567214e7bdfe388e984670baa2c4e4
         environment:
             # Set your mnemonic here or use secrets management
+            - RUST_LOG=info
             - MNEMONIC=${MNEMONIC}
             - OPENRANK_MANAGER_ADDRESS=${OPENRANK_MANAGER_ADDRESS}
-            - RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+            - CHAIN_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
         restart: unless-stopped
