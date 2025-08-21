@@ -3472,7 +3472,7 @@ checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
 name = "openrank-app"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -3499,7 +3499,7 @@ dependencies = [
 
 [[package]]
 name = "openrank-common"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "alloy",
  "alloy-primitives 0.8.25",
@@ -3521,7 +3521,7 @@ dependencies = [
 
 [[package]]
 name = "openrank-sdk"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "alloy",
  "alloy-rlp",
