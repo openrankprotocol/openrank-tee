@@ -420,7 +420,13 @@ pub async fn run<PH: Provider>(
     loop {
         interval.tick().await; // Wait for the next tick
 
-        let current_block = provider.get_block_number().await.unwrap();
+        let current_block = match provider.get_block_number().await {
+            Ok(block) => block,
+            Err(e) => {
+                error!("Error getting current block number: {}", e);
+                continue;
+            }
+        };
 
         let meta_compute_result_filter = contract
             .MetaComputeResultEvent_filter()
@@ -433,22 +439,40 @@ pub async fn run<PH: Provider>(
             .to_block(BlockNumberOrTag::Number(current_block))
             .filter;
 
-        let result_logs = provider
-            .get_logs(&meta_compute_result_filter)
-            .await
-            .unwrap();
-        let request_logs = provider
-            .get_logs(&meta_compute_request_filter)
-            .await
-            .unwrap();
+        let result_logs = match provider.get_logs(&meta_compute_result_filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Error getting result logs: {}", e);
+                continue;
+            }
+        };
+        let request_logs = match provider.get_logs(&meta_compute_request_filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Error getting request logs: {}", e);
+                continue;
+            }
+        };
 
         for log in result_logs {
-            let res: Log<MetaComputeResultEvent> = log.log_decode().unwrap();
+            let res: Log<MetaComputeResultEvent> = match log.log_decode() {
+                Ok(decoded) => decoded,
+                Err(e) => {
+                    error!("Error decoding result log: {}", e);
+                    continue;
+                }
+            };
             finished_jobs.insert(res.data().computeId);
         }
 
         for log in request_logs {
-            let res: Log<MetaComputeRequestEvent> = log.log_decode().unwrap();
+            let res: Log<MetaComputeRequestEvent> = match log.log_decode() {
+                Ok(decoded) => decoded,
+                Err(e) => {
+                    error!("Error decoding request log: {}", e);
+                    continue;
+                }
+            };
             if finished_jobs.contains(&res.data().computeId) {
                 continue;
             }

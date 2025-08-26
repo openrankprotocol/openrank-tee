@@ -469,7 +469,13 @@ pub async fn run<P: Provider>(
     loop {
         interval.tick().await; // Wait for the next tick
 
-        let current_block = provider.get_block_number().await.unwrap();
+        let current_block = match provider.get_block_number().await {
+            Ok(block) => block,
+            Err(e) => {
+                error!("Error getting current block number: {}", e);
+                continue;
+            }
+        };
 
         let meta_compute_result_filter = manager_contract
             .MetaComputeResultEvent_filter()
@@ -487,33 +493,60 @@ pub async fn run<P: Provider>(
             .to_block(BlockNumberOrTag::Number(current_block))
             .filter;
 
-        let result_logs = provider
-            .get_logs(&meta_compute_result_filter)
-            .await
-            .unwrap();
-        let request_logs = provider
-            .get_logs(&meta_compute_request_filter)
-            .await
-            .unwrap();
-        let challenge_logs = provider
-            .get_logs(&meta_compute_challenge_filter)
-            .await
-            .unwrap();
+        let result_logs = match provider.get_logs(&meta_compute_result_filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Error getting result logs: {}", e);
+                continue;
+            }
+        };
+        let request_logs = match provider.get_logs(&meta_compute_request_filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Error getting request logs: {}", e);
+                continue;
+            }
+        };
+        let challenge_logs = match provider.get_logs(&meta_compute_challenge_filter).await {
+            Ok(logs) => logs,
+            Err(e) => {
+                error!("Error getting challenge logs: {}", e);
+                continue;
+            }
+        };
 
         for log in request_logs {
-            let res: Log<MetaComputeRequestEvent> = log.log_decode().unwrap();
+            let res: Log<MetaComputeRequestEvent> = match log.log_decode() {
+                Ok(decoded) => decoded,
+                Err(e) => {
+                    error!("Error decoding request log: {}", e);
+                    continue;
+                }
+            };
             let compute_req = res.data();
             meta_compute_request_map.insert(compute_req.computeId, compute_req.clone());
         }
 
         for log in challenge_logs {
-            let res: Log<MetaChallengeEvent> = log.log_decode().unwrap();
+            let res: Log<MetaChallengeEvent> = match log.log_decode() {
+                Ok(decoded) => decoded,
+                Err(e) => {
+                    error!("Error decoding challenge log: {}", e);
+                    continue;
+                }
+            };
             let challenge = res.data();
             meta_challanged_jobs_map.insert(challenge.computeId, log);
         }
 
         for log in result_logs {
-            let res: Log<MetaComputeResultEvent> = log.log_decode().unwrap();
+            let res: Log<MetaComputeResultEvent> = match log.log_decode() {
+                Ok(decoded) => decoded,
+                Err(e) => {
+                    error!("Error decoding result log: {}", e);
+                    continue;
+                }
+            };
             let meta_compute_res = res.data();
             if let Err(e) = handle_meta_compute_result(
                 &manager_contract,
