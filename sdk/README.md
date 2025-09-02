@@ -20,17 +20,35 @@ cd sdk
 cargo build --release
 ```
 
-The binary will be available at `target/release/openrank-sdk`.
+The binary will be available at `target/release/openrank`.
 
 ## Commands
 
-### Meta Operations
+### Initialisation
 
-#### `meta-compute-request`
+Initialise the workspace with example datasets and .env file:
+
+```bash
+openrank init ./my-workspace
+```
+
+This command will create a folder with following structure:
+- trust/
+- seed/
+- .env
+
+.env file contains a placeholder for your mnemonic phrase:
+```sh
+MNEMONIC="add your mnemonic phrase here"
+```
+
+### Operations
+
+#### `compute-request`
 Submit a computation request using trust and seed data from local folders.
 
 ```bash
-openrank-sdk meta-compute-request <TRUST_FOLDER_PATH> <SEED_FOLDER_PATH>
+openrank compute-request <TRUST_FOLDER_PATH> <SEED_FOLDER_PATH>
 ```
 
 **Arguments:**
@@ -39,14 +57,14 @@ openrank-sdk meta-compute-request <TRUST_FOLDER_PATH> <SEED_FOLDER_PATH>
 
 **Example:**
 ```bash
-openrank-sdk meta-compute-request ./trust_data ./seed_data
+openrank compute-request ./trust_data ./seed_data
 ```
 
-#### `meta-compute-watch`
+#### `compute-watch`
 Monitor and watch for computation results by compute ID.
 
 ```bash
-openrank-sdk meta-compute-watch <COMPUTE_ID> [--out-dir <OUT_DIR>]
+openrank compute-watch <COMPUTE_ID> [--out-dir <OUT_DIR>]
 ```
 
 **Arguments:**
@@ -57,14 +75,14 @@ openrank-sdk meta-compute-watch <COMPUTE_ID> [--out-dir <OUT_DIR>]
 
 **Example:**
 ```bash
-openrank-sdk meta-compute-watch abc123 --out-dir ./results
+openrank compute-watch abc123 --out-dir ./results
 ```
 
-#### `meta-download-scores`
+#### `download-scores`
 Download computed scores for a specific computation.
 
 ```bash
-openrank-sdk meta-download-scores <COMPUTE_ID> [--out-dir <OUT_DIR>]
+openrank download-scores <COMPUTE_ID> [--out-dir <OUT_DIR>]
 ```
 
 **Arguments:**
@@ -75,7 +93,7 @@ openrank-sdk meta-download-scores <COMPUTE_ID> [--out-dir <OUT_DIR>]
 
 **Example:**
 ```bash
-openrank-sdk meta-download-scores abc123 --out-dir ./scores
+openrank download-scores abc123 --out-dir ./scores
 ```
 
 ### Local Operations
@@ -84,7 +102,7 @@ openrank-sdk meta-download-scores abc123 --out-dir ./scores
 Run OpenRank computation locally using trust and seed CSV files.
 
 ```bash
-openrank-sdk compute-local <TRUST_PATH> <SEED_PATH> [OUTPUT_PATH]
+openrank compute-local <TRUST_PATH> <SEED_PATH> [OUTPUT_PATH]
 ```
 
 **Arguments:**
@@ -98,14 +116,14 @@ openrank-sdk compute-local <TRUST_PATH> <SEED_PATH> [OUTPUT_PATH]
 
 **Example:**
 ```bash
-openrank-sdk compute-local trust.csv seed.csv scores.csv
+openrank compute-local trust.csv seed.csv scores.csv
 ```
 
 #### `verify-local`
 Verify computed scores against trust and seed data locally.
 
 ```bash
-openrank-sdk verify-local <TRUST_PATH> <SEED_PATH> <SCORES_PATH>
+openrank verify-local <TRUST_PATH> <SEED_PATH> <SCORES_PATH>
 ```
 
 **Arguments:**
@@ -115,41 +133,7 @@ openrank-sdk verify-local <TRUST_PATH> <SEED_PATH> <SCORES_PATH>
 
 **Example:**
 ```bash
-openrank-sdk verify-local trust.csv seed.csv computed_scores.csv
-```
-
-### Data Management
-
-#### `upload-trust`
-Upload trust data to the distributed storage system.
-
-```bash
-openrank-sdk upload-trust <PATH> <CERTS_PATH>
-```
-
-**Arguments:**
-- `PATH` - Path to trust CSV file
-- `CERTS_PATH` - Path to certificates for authentication
-
-**Example:**
-```bash
-openrank-sdk upload-trust trust.csv ./certs
-```
-
-#### `download-trust`
-Download trust data from the distributed storage system.
-
-```bash
-openrank-sdk download-trust <PATH> <CERTS_PATH>
-```
-
-**Arguments:**
-- `PATH` - Local path to save downloaded trust data
-- `CERTS_PATH` - Path to certificates for authentication
-
-**Example:**
-```bash
-openrank-sdk download-trust ./downloaded_trust.csv ./certs
+openrank verify-local trust.csv seed.csv computed_scores.csv
 ```
 
 ## Data Formats
@@ -178,16 +162,6 @@ bob,0.32
 charlie,0.23
 ```
 
-## Environment Setup
-
-The SDK requires AWS credentials for S3 operations. Set up your environment:
-
-```bash
-export AWS_ACCESS_KEY_ID=your_access_key
-export AWS_SECRET_ACCESS_KEY=your_secret_key
-export AWS_DEFAULT_REGION=your_region
-```
-
 Or use AWS credential files and profiles as per standard AWS CLI configuration.
 
 ## Examples
@@ -204,28 +178,28 @@ Or use AWS credential files and profiles as per standard AWS CLI configuration.
 
 2. **Run local computation:**
    ```bash
-   openrank-sdk compute-local trust.csv seed.csv scores.csv
+   openrank compute-local trust.csv seed.csv scores.csv
    ```
 
 3. **Verify the results:**
    ```bash
-   openrank-sdk verify-local trust.csv seed.csv scores.csv
+   openrank verify-local trust.csv seed.csv scores.csv
    ```
 
 ### Distributed Computation Workflow
 1. **Submit computation request:**
    ```bash
-   openrank-sdk meta-compute-request ./trust_folder ./seed_folder
+   openrank compute-request ./trust_folder ./seed_folder
    ```
 
 2. **Monitor computation:**
    ```bash
-   openrank-sdk meta-compute-watch <compute_id> --out-dir ./results
+   openrank compute-watch <compute_id> --out-dir ./results
    ```
 
 3. **Download results:**
    ```bash
-   openrank-sdk meta-download-scores <compute_id> --out-dir ./final_scores
+   openrank download-scores <compute_id> --out-dir ./final_scores
    ```
 
 ## Algorithm Details
@@ -242,8 +216,8 @@ The algorithm iteratively computes trust scores until convergence, providing a r
 ## Getting Help
 
 ```bash
-openrank-sdk --help
-openrank-sdk <command> --help
+openrank --help
+openrank <command> --help
 ```
 
 For more information about the OpenRank system and TEE deployment, see the main project documentation.
