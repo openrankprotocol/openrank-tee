@@ -12,8 +12,16 @@ contract OpenRankManager is OpenRankManagerStorage {
 
     constructor() OpenRankManagerStorage() {}
 
+    function allowlistUser(address user) onlyOwner external {
+        allowlistedUsers[user] = true;
+    }
+
     function allowlistComputer(address computer) onlyOwner external {
         allowlistedComputers[computer] = true;
+    }
+
+    function allowlistChallenger(address challenger) onlyOwner external {
+        allowlistedChallengers[challenger] = true;
     }
 
     // ---------------------------------------------------------------
