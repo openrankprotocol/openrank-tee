@@ -10,14 +10,16 @@ use actions::{
 use alloy::eips::BlockNumberOrTag;
 use alloy::hex::{FromHex, ToHexExt};
 use alloy::primitives::{Address, FixedBytes, TxHash, Uint};
-use alloy::providers::{Provider, ProviderBuilder, WsConnect};
+use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::client::RpcClient;
 use alloy::rpc::types::Log;
 use alloy::signers::local::coins_bip39::English;
 use alloy::signers::local::MnemonicBuilder;
 use alloy::transports::http::reqwest::Url;
-use aws_config::from_env;
-use aws_sdk_s3::{Client, Error as AwsError};
+use aws_config::{BehaviorVersion, Region, SdkConfig};
+use aws_credential_types::Credentials;
+use aws_sdk_s3::config::SharedCredentialsProvider;
+use aws_sdk_s3::Client;
 use clap::{Parser, Subcommand};
 use csv::StringRecord;
 use dotenv::dotenv;
@@ -31,8 +33,10 @@ use std::collections::HashMap;
 use std::fs::{read_dir, File};
 use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 use std::str::FromStr;
-use tokio::fs::create_dir_all;
+
+use tokio::fs::{self, create_dir_all};
 use tracing::info;
 
 /// Helper function to parse trust entries from a CSV file
@@ -133,6 +137,9 @@ enum Method {
         seed_path: String,
         scores_path: String,
     },
+    Init {
+        path: String,
+    },
     UploadTrust {
         path: String,
         certs_path: String,
@@ -178,7 +185,7 @@ struct JobResult {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), AwsError> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
     setup_tracing();
     let cli = Args::parse();
@@ -186,41 +193,36 @@ async fn main() -> Result<(), AwsError> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    let rpc_url = std::env::var("CHAIN_RPC_URL").expect("CHAIN_RPC_URL must be set.");
-    let manager_address =
-        std::env::var("OPENRANK_MANAGER_ADDRESS").expect("OPENRANK_MANAGER_ADDRESS must be set.");
-    let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
-    let config = from_env().region("us-west-2").load().await;
+    let rpc_url = env!("CHAIN_RPC_URL");
+    let manager_address = env!("OPENRANK_MANAGER_ADDRESS");
+    let aws_access_key_id = env!("AWS_ACCESS_KEY_ID");
+    let aws_secret_access_key = env!("AWS_SECRET_ACCESS_KEY");
+    let credentials = Credentials::from_keys(aws_access_key_id, aws_secret_access_key, None);
+    let config = SdkConfig::builder()
+        .region(Some(Region::new("us-west-2")))
+        .credentials_provider(SharedCredentialsProvider::new(credentials))
+        .behavior_version(BehaviorVersion::latest())
+        .build();
     let client = Client::new(&config);
 
-    let mut wss_url = rpc_url.clone();
-    wss_url = wss_url.replace("http", "ws");
-    wss_url = wss_url.replace("https", "wss");
-
-    let wallet = MnemonicBuilder::<English>::default()
-        .phrase(mnemonic)
-        .index(0)
-        .unwrap()
-        .build()
-        .unwrap();
-
-    let ws = WsConnect::new(wss_url);
-    let provider_wss = ProviderBuilder::new().on_ws(ws).await.unwrap();
-
     let manager_address = Address::from_hex(manager_address).unwrap();
-    let manager_contract_ws = OpenRankManager::new(manager_address, provider_wss.clone());
-    let provider = ProviderBuilder::new()
-        .wallet(wallet)
-        .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
-    let current_block = provider.get_block_number().await.unwrap();
-    let manager_contract = OpenRankManager::new(manager_address, provider.clone());
 
-    let starting_block = (current_block - 10).max(0);
     match cli.method {
         Method::MetaDownloadScores {
             compute_id,
             out_dir,
         } => {
+            let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .index(0)
+                .unwrap()
+                .build()
+                .unwrap();
+            let provider = ProviderBuilder::new()
+                .wallet(wallet)
+                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+            let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let compute_id_uint = Uint::<256, 4>::from_str(&compute_id).unwrap();
             let compute_request = manager_contract
                 .metaComputeRequests(compute_id_uint)
@@ -261,15 +263,28 @@ async fn main() -> Result<(), AwsError> {
             compute_id,
             out_dir,
         } => {
-            let mut job_metadata = JobMetadata::new();
+            let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .index(0)
+                .unwrap()
+                .build()
+                .unwrap();
+            let provider = ProviderBuilder::new()
+                .wallet(wallet)
+                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+            let manager_contract = OpenRankManager::new(manager_address, provider.clone());
+            let current_block = provider.get_block_number().await.unwrap();
+            let starting_block = (current_block - 10).max(0);
 
-            let request_logs_filter = manager_contract_ws
+            let mut job_metadata = JobMetadata::new();
+            let request_logs_filter = manager_contract
                 .MetaComputeRequestEvent_filter()
                 .from_block(BlockNumberOrTag::Number(starting_block))
                 .to_block(BlockNumberOrTag::Latest)
                 .topic1(Uint::from_str(&compute_id).unwrap())
                 .filter;
-            let results_log_filter = manager_contract_ws
+            let results_log_filter = manager_contract
                 .MetaComputeResultEvent_filter()
                 .from_block(BlockNumberOrTag::Number(starting_block))
                 .to_block(BlockNumberOrTag::Latest)
@@ -286,7 +301,7 @@ async fn main() -> Result<(), AwsError> {
                 job_metadata.set_results_tx_hash(log.transaction_hash.unwrap());
             }
 
-            let mut meta_compute_request_stream = manager_contract_ws
+            let mut meta_compute_request_stream = manager_contract
                 .MetaComputeRequestEvent_filter()
                 .from_block(BlockNumberOrTag::Number(current_block - 1))
                 .topic1(Uint::from_str(&compute_id).unwrap())
@@ -294,7 +309,7 @@ async fn main() -> Result<(), AwsError> {
                 .await
                 .unwrap()
                 .into_stream();
-            let mut meta_compute_result_stream = manager_contract_ws
+            let mut meta_compute_result_stream = manager_contract
                 .MetaComputeResultEvent_filter()
                 .from_block(BlockNumberOrTag::Number(current_block - 1))
                 .topic1(Uint::from_str(&compute_id).unwrap())
@@ -332,6 +347,18 @@ async fn main() -> Result<(), AwsError> {
             trust_folder_path,
             seed_folder_path,
         } => {
+            let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .index(0)
+                .unwrap()
+                .build()
+                .unwrap();
+            let provider = ProviderBuilder::new()
+                .wallet(wallet)
+                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+            let manager_contract = OpenRankManager::new(manager_address, provider.clone());
+
             let trust_paths = read_dir(trust_folder_path).unwrap();
             let mut trust_map = HashMap::new();
             for path in trust_paths {
@@ -439,6 +466,113 @@ async fn main() -> Result<(), AwsError> {
                 .await
                 .unwrap();
             println!("Verification result: {}", res);
+        }
+        Method::Init { path } => {
+            // Ensure target directory exists
+            if let Err(e) = create_dir_all(&path).await {
+                eprintln!("Failed to create directory {}: {}", path, e);
+                return Ok(());
+            }
+
+            // Check if git is available
+            let git_check = std::process::Command::new("git")
+                .args(&["--version"])
+                .output();
+            match git_check {
+                Ok(output) if output.status.success() => {
+                    println!("Git found, cloning datasets repository...");
+                }
+                _ => {
+                    eprintln!("Git is not available. Please install Git to use this command.");
+                    return Ok(());
+                }
+            }
+
+            // Check if git lfs is available
+            let lfs_output = std::process::Command::new("git")
+                .args(&["lfs", "version"])
+                .output()
+                .unwrap();
+            if !lfs_output.status.success() {
+                println!("Git LFS not available, skipping large file download");
+                println!("Note: LFS content may not be available without Git LFS");
+            }
+
+            // Clone the repository with shallow clone (no history)
+            let output = std::process::Command::new("git")
+                .args(&[
+                    "clone",
+                    "--depth",
+                    "1",
+                    "--single-branch",
+                    "--branch",
+                    "main",
+                    "https://github.com/openrankprotocol/datasets.git",
+                    &path,
+                ])
+                .output()
+                .unwrap();
+            if !output.status.success() {
+                eprintln!(
+                    "Git clone failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                return Ok(());
+            }
+
+            let remove_origin_output = Command::new("git")
+                .args(&["remote", "remove", "origin"])
+                .current_dir(&path)
+                .output()
+                .unwrap();
+            if !remove_origin_output.status.success() {
+                eprintln!(
+                    "Git cleanup failed: {}",
+                    String::from_utf8_lossy(&remove_origin_output.stderr)
+                );
+                return Ok(());
+            }
+
+            // Download Git LFS content before removing git directory
+            println!("Downloading Git LFS content...");
+
+            // Change to the datasets directory and pull LFS files
+            let lfs_pull_output = std::process::Command::new("git")
+                .args(&["lfs", "pull"])
+                .current_dir(&path)
+                .output()
+                .unwrap();
+
+            if !lfs_pull_output.status.success() {
+                eprintln!(
+                    "Git LFS pull failed: {}",
+                    String::from_utf8_lossy(&lfs_pull_output.stderr)
+                );
+                println!("Continuing without LFS content...");
+            }
+
+            let cleanup_output = Command::new("rm")
+                .args(&["-rf", ".git", ".gitattributes", ".gitignore"])
+                .current_dir(&path)
+                .output()
+                .unwrap();
+            if !cleanup_output.status.success() {
+                eprintln!(
+                    "Git cleanup failed: {}",
+                    String::from_utf8_lossy(&remove_origin_output.stderr)
+                );
+                return Ok(());
+            }
+
+            // Create .env file
+            let env_path = format!("{}/.env", path);
+            if let Err(e) = fs::write(&env_path, "MNEMONIC=\"add your mnemonic phrase here\"").await
+            {
+                eprintln!("Failed to create .env file: {}", e);
+                return Ok(());
+            }
+
+            println!("Initialization completed!");
         }
         Method::UploadTrust { path, certs_path } => {
             let eigen_da_url = std::env::var("EIGEN_DA_PROXY_URL").unwrap();
