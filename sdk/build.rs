@@ -3,10 +3,10 @@ use std::path::Path;
 
 fn main() {
     // Tell Cargo to rerun this build script if the .env file changes
-    println!("cargo:rerun-if-changed=../.env");
+    println!("cargo:rerun-if-changed=.env");
 
     // Look for .env file in the parent directory (project root)
-    let env_path = Path::new("../.env");
+    let env_path = Path::new(".env");
 
     if env_path.exists() {
         // Read the .env file

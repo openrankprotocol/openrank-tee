@@ -3546,8 +3546,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4895175b425cb1f87721b59f0f286c2092bd4af812243672510e1ac53e2e0ad"
 
 [[package]]
+name = "openrank"
+version = "0.2.3"
+dependencies = [
+ "alloy",
+ "alloy-rlp",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-s3",
+ "base64 0.22.1",
+ "clap",
+ "csv",
+ "curl",
+ "dotenv",
+ "flate2",
+ "futures-util",
+ "openrank-common",
+ "rustls 0.23.29",
+ "serde",
+ "serde_json",
+ "sha3",
+ "tar",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "openrank-app"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "alloy",
  "alloy-rlp",
@@ -3574,7 +3600,7 @@ dependencies = [
 
 [[package]]
 name = "openrank-common"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "alloy",
  "alloy-primitives 0.8.25",
@@ -3592,32 +3618,6 @@ dependencies = [
  "time",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "openrank-sdk"
-version = "0.2.2"
-dependencies = [
- "alloy",
- "alloy-rlp",
- "aws-config",
- "aws-credential-types",
- "aws-sdk-s3",
- "base64 0.22.1",
- "clap",
- "csv",
- "curl",
- "dotenv",
- "flate2",
- "futures-util",
- "openrank-common",
- "rustls 0.23.29",
- "serde",
- "serde_json",
- "sha3",
- "tar",
- "tokio",
- "tracing",
 ]
 
 [[package]]

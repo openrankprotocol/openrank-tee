@@ -24,14 +24,12 @@ use clap::{Parser, Subcommand};
 use csv::StringRecord;
 use dotenv::dotenv;
 use futures_util::StreamExt;
-use openrank_common::eigenda::EigenDAProxyClient;
 use openrank_common::logs::setup_tracing;
 use openrank_common::tx::trust::{ScoreEntry, TrustEntry};
 use serde::{Deserialize, Serialize};
 use sol::OpenRankManager;
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
-use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
@@ -113,17 +111,17 @@ impl JobMetadata {
 #[derive(Debug, Clone, Subcommand)]
 /// The method to call.
 enum Method {
-    MetaDownloadScores {
+    DownloadScores {
         compute_id: String,
         #[arg(long)]
         out_dir: Option<String>,
     },
-    MetaComputeWatch {
+    ComputeWatch {
         compute_id: String,
         #[arg(long)]
         out_dir: Option<String>,
     },
-    MetaComputeRequest {
+    ComputeRequest {
         trust_folder_path: String,
         seed_folder_path: String,
     },
@@ -140,14 +138,7 @@ enum Method {
     Init {
         path: String,
     },
-    UploadTrust {
-        path: String,
-        certs_path: String,
-    },
-    DownloadTrust {
-        path: String,
-        certs_path: String,
-    },
+    ShowManagerAddress,
 }
 
 #[derive(Parser, Debug)]
@@ -208,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manager_address = Address::from_hex(manager_address).unwrap();
 
     match cli.method {
-        Method::MetaDownloadScores {
+        Method::DownloadScores {
             compute_id,
             out_dir,
         } => {
@@ -259,7 +250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             }
         }
-        Method::MetaComputeWatch {
+        Method::ComputeWatch {
             compute_id,
             out_dir,
         } => {
@@ -343,7 +334,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 print!("{}", serde_json::to_string(&job_metadata).unwrap())
             }
         }
-        Method::MetaComputeRequest {
+        Method::ComputeRequest {
             trust_folder_path,
             seed_folder_path,
         } => {
@@ -574,33 +565,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Initialization completed!");
         }
-        Method::UploadTrust { path, certs_path } => {
-            let eigen_da_url = std::env::var("EIGEN_DA_PROXY_URL").unwrap();
-            {
-                let f = File::open(path.clone()).unwrap();
-                let mut rdr = csv::Reader::from_reader(f);
-                for result in rdr.records() {
-                    let record: StringRecord = result.unwrap();
-                    let (_, _, _): (String, String, f32) = record.deserialize(None).unwrap();
-                }
-            }
-            let data = std::fs::read(&path).unwrap(); // Read the contents of the file into a vector of bytes
-
-            let eigenda_client = EigenDAProxyClient::new(eigen_da_url);
-            let res = eigenda_client.put_meta(data).await.unwrap();
-
-            let mut file = File::create(certs_path).unwrap();
-            file.write(&res).unwrap();
-        }
-        Method::DownloadTrust { path, certs_path } => {
-            let eigen_da_url = std::env::var("EIGEN_DA_PROXY_URL").unwrap();
-            let data = std::fs::read(&certs_path).unwrap();
-
-            let eigenda_client = EigenDAProxyClient::new(eigen_da_url);
-
-            let res = eigenda_client.put_meta(data).await.unwrap();
-            let mut file = File::create(path).unwrap();
-            file.write(&res).unwrap();
+        Method::ShowManagerAddress => {
+            println!("{}", manager_address);
         }
     };
 
