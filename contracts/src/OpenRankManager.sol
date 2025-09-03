@@ -7,6 +7,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract OpenRankManager is OpenRankManagerStorage {
     function initialize() public initializer {
         idCounter = 1;
+        CHALLENGE_WINDOW = 60 * 60; // 60 minutes
 
         allowlistedComputers[msg.sender] = true;
         allowlistedChallengers[msg.sender] = true;

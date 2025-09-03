@@ -7,7 +7,7 @@ import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
 abstract contract OpenRankManagerStorage is IOpenRankManager, Initializable, UUPSUpgradeable, OwnableUpgradeable {
-    uint64 public CHALLENGE_WINDOW = 60 * 60; // 60 minutes
+    uint64 public CHALLENGE_WINDOW;
 
     uint256 public idCounter;
 

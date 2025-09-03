@@ -4,14 +4,23 @@ out = "contracts/out"
 test = "contracts/test"
 cache_path = "contracts/cache"
 libs = ["contracts/lib"]
-fs_permissions = [{ access = "read-write", path = "./" }]
+fs_permissions = [
+    { access = "read-write", path = "./" },
+    { access = "read-write", path = "./contracts" },
+]
 solc = "0.8.27"
-via-ir = true
+# The following are needed for OpenZeppelin Upgrades:
+# https://docs.openzeppelin.com/upgrades-plugins/foundry-upgrades#before_running
+ffi = true
+ast = true
+build_info = true
+extra_output = ["storageLayout"]
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 remappings = [
     "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts",
     "@openzeppelin/contracts-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts",
+    "@openzeppelin-foundry-upgrades/=contracts/lib/openzeppelin-foundry-upgrades/src",
     "eigenlayer-middleware/=.devkit/compute-tee/contracts/lib/eigenlayer-middleware/",
     "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/src/",
 ]

@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import {Test, console} from "forge-std/Test.sol";
 import {OpenRankManager} from "../src/OpenRankManager.sol";
 import {DeployOpenRank} from "../script/DeployOpenRank.s.sol";
+import { Upgrades, Options } from "@openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract OpenRankManagerTest is Test {
     OpenRankManager orManager;
