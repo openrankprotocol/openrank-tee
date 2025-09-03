@@ -8,4 +8,4 @@ forge script \
   contracts/script/DeployOpenRank.s.sol:DeployOpenRank \
   --broadcast \
   --verify \
-  --etherscan-api-key "${ALCHEMY_API_KEY}" \
+  --etherscan-api-key "${ETHERSCAN_API_KEY}" \

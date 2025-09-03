@@ -12,18 +12,6 @@ contract OpenRankManager is OpenRankManagerStorage {
 
     constructor() OpenRankManagerStorage() {}
 
-    function allowlistUser(address user) onlyOwner external {
-        allowlistedUsers[user] = true;
-    }
-
-    function allowlistComputer(address computer) onlyOwner external {
-        allowlistedComputers[computer] = true;
-    }
-
-    function allowlistChallenger(address challenger) onlyOwner external {
-        allowlistedChallengers[challenger] = true;
-    }
-
     // ---------------------------------------------------------------
     // Meta Jobs
     // ---------------------------------------------------------------
@@ -110,5 +98,17 @@ contract OpenRankManager is OpenRankManagerStorage {
         uint64 challengeWindow
     ) public onlyOwner {
         CHALLENGE_WINDOW = challengeWindow;
+    }
+
+    function allowlistUser(address user) onlyOwner external {
+        allowlistedUsers[user] = true;
+    }
+
+    function allowlistComputer(address computer) onlyOwner external {
+        allowlistedComputers[computer] = true;
+    }
+
+    function allowlistChallenger(address challenger) onlyOwner external {
+        allowlistedChallengers[challenger] = true;
     }
 }
