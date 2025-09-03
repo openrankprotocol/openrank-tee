@@ -2,11 +2,12 @@
 pragma solidity ^0.8.27;
 
 import {IOpenRankManager} from "./IOpenRankManager.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 
-abstract contract OpenRankManagerStorage is IOpenRankManager {
+abstract contract OpenRankManagerStorage is IOpenRankManager, Initializable, UUPSUpgradeable, OwnableUpgradeable {
     uint64 public CHALLENGE_WINDOW = 60 * 60; // 60 minutes
-
-    address owner;
 
     uint256 public idCounter;
 
@@ -18,13 +19,8 @@ abstract contract OpenRankManagerStorage is IOpenRankManager {
     mapping(uint256 => MetaComputeResult) public metaComputeResults;
     mapping(uint256 => MetaChallenge) public metaChallenges;
 
+    /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
-        idCounter = 1;
-
-        allowlistedComputers[msg.sender] = true;
-        allowlistedChallengers[msg.sender] = true;
-        allowlistedUsers[msg.sender] = true;
-
-        owner = msg.sender;
+        _disableInitializers();
     }
 }

@@ -9,7 +9,12 @@ contract OpenRankManagerTest is Test {
     OpenRankManager orManager;
 
     function setUp() public {
-        orManager = new OpenRankManager();
+        address proxy = Upgrades.deployUUPSProxy(
+            "OpenRankManager.sol:OpenRankManager",
+            abi.encodeCall(OpenRankManager.initialize,())
+        );
+
+        orManager = OpenRankManager(proxy);
     }
 
     function testMetaChallenge() public {

@@ -10,7 +10,8 @@ via-ir = true
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 remappings = [
-    "@openzeppelin/=contracts/lib/openzeppelin-contracts/",
+    "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts",
+    "@openzeppelin/contracts-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts",
     "eigenlayer-middleware/=.devkit/compute-tee/contracts/lib/eigenlayer-middleware/",
     "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/src/",
 ]

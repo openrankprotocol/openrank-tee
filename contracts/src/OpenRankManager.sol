@@ -5,12 +5,18 @@ import {OpenRankManagerStorage} from "./OpenRankManagerStorage.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract OpenRankManager is OpenRankManagerStorage {
-    modifier onlyOwner() {
-        require(msg.sender == owner);
-        _;
+    function initialize() public initializer {
+        idCounter = 1;
+
+        allowlistedComputers[msg.sender] = true;
+        allowlistedChallengers[msg.sender] = true;
+        allowlistedUsers[msg.sender] = true;
+
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
     }
 
-    constructor() OpenRankManagerStorage() {}
+    function _authorizeUpgrade(address) internal override onlyOwner { }
 
     // ---------------------------------------------------------------
     // Meta Jobs
