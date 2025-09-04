@@ -2,7 +2,7 @@
 
 services:
     openrank-computer:
-        image: lazovicff/openrank-computer@sha256:6aa3d602798a29e9f86489f089b8cee753567214e7bdfe388e984670baa2c4e4
+        image: lazovicff/openrank-computer@sha256:0d5341f545bec909d997380c2824ceaeb3717a7913172987d5758e673703d717
         environment:
             # Set your mnemonic here or use secrets management
             - RUST_LOG=info
