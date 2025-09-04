@@ -19,6 +19,9 @@ abstract contract OpenRankManagerStorage is IOpenRankManager, Initializable, UUP
     mapping(uint256 => MetaComputeResult) public metaComputeResults;
     mapping(uint256 => MetaChallenge) public metaChallenges;
 
+    // Mind the gap
+    uint256[49] __gap;
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
         _disableInitializers();
