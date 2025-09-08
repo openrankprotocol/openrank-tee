@@ -107,16 +107,23 @@ jobs:
               with:
                   path: artifacts
 
-            - name: Create checksums
+            - name: Rename artifacts and create checksums
               run: |
-                  cd artifacts
-                  find . -type f -exec sha256sum {} \; > ../checksums.txt
+                  mkdir -p release-assets
+                  # Rename each artifact to its proper asset name
+                  find artifacts -name "openrank*" -type f | while read file; do
+                    asset_dir=$(basename $(dirname "$file"))
+                    cp "$file" "release-assets/$asset_dir"
+                  done
+                  # Create checksums
+                  cd release-assets
+                  sha256sum * > ../checksums.txt
 
             - name: Create Release
               uses: softprops/action-gh-release@v2
               with:
                   files: |
-                      artifacts/*/openrank*
+                      release-assets/*
                       checksums.txt
                   body: |
                       ## OpenRank CLI Release
