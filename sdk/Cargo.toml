@@ -35,5 +35,10 @@ flate2 = { workspace = true }
 curl = { workspace = true }
 tar = { workspace = true }
 
-# OpenSSL with vendored feature for cross-compilation
+# OpenSSL with vendored feature for cross-compilation (except Windows)
+[target.'cfg(not(target_os = "windows"))'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
+
+# Use system OpenSSL for Windows to avoid Perl compilation issues
+[target.'cfg(target_os = "windows")'.dependencies]
+openssl = { version = "0.10" }
