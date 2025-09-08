@@ -3562,6 +3562,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "openrank-common",
+ "openssl",
  "rustls 0.23.29",
  "serde",
  "serde_json",

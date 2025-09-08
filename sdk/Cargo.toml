@@ -34,3 +34,6 @@ rustls = { workspace = true }
 flate2 = { workspace = true }
 curl = { workspace = true }
 tar = { workspace = true }
+
+# OpenSSL with vendored feature for cross-compilation
+openssl = { version = "0.10", features = ["vendored"] }
