@@ -2,6 +2,26 @@
 
 A decentralized reputation computation protocol leveraging Trusted Execution Environments (TEEs) and EigenLayer for secure, verifiable PageRank-style calculations.
 
+## Quick Install
+
+### One-liner Installation
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install.sh | bash
+```
+
+### Manual Installation
+
+1. **Download pre-compiled binary** from [Releases](https://github.com/openrankprotocol/openrank-tee/releases)
+2. **Make executable** (Linux/macOS): `chmod +x openrank-*`  
+3. **Move to PATH**: `sudo mv openrank-* /usr/local/bin/openrank`
+
+### Usage
+```bash
+openrank --help
+```
+
 ## Overview
 
 OpenRank TEE is a decentralized protocol that enables secure computation of reputation scores using Trusted Execution Environments (TEEs). The protocol integrates with EigenLayer's restaking infrastructure to provide economic security and operator management, while ensuring computational integrity through TEE attestations and challenge mechanisms.
