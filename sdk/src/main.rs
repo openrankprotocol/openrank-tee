@@ -37,6 +37,8 @@ use std::str::FromStr;
 use tokio::fs::{self, create_dir_all};
 use tracing::info;
 
+const BLOCK_NUMBER_HISTORY: u64 = 1000;
+
 /// Helper function to parse trust entries from a CSV file
 fn parse_trust_entries_from_file(file: File) -> Result<Vec<TrustEntry>, csv::Error> {
     let mut reader = csv::Reader::from_reader(file);
@@ -266,7 +268,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let current_block = provider.get_block_number().await.unwrap();
-            let starting_block = (current_block - 10).max(0);
+            let starting_block = (current_block - BLOCK_NUMBER_HISTORY).max(0);
 
             let mut job_metadata = JobMetadata::new();
             let request_logs_filter = manager_contract
