@@ -38,6 +38,15 @@ jobs:
                       artifact_name: openrank
                       asset_name: openrank-macos-arm64
 
+                    - os: windows-latest
+                      target: x86_64-pc-windows-msvc
+                      artifact_name: openrank.exe
+                      asset_name: openrank-windows-amd64.exe
+                    - os: windows-latest
+                      target: aarch64-pc-windows-msvc
+                      artifact_name: openrank.exe
+                      asset_name: openrank-windows-arm64.exe
+
         steps:
             - uses: actions/checkout@v4
 
@@ -132,9 +141,14 @@ jobs:
 
                       ### Installation
 
+                      #### Linux/macOS:
                       1. Download the appropriate binary for your platform
                       2. Make it executable: `chmod +x openrank-*`
                       3. Move to PATH: `sudo mv openrank-* /usr/local/bin/openrank`
+
+                      #### Windows:
+                      1. Download the appropriate `.exe` file for your platform
+                      2. Add to PATH or run directly
 
                       ### Checksums
 
