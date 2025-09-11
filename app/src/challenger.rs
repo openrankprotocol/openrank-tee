@@ -59,6 +59,9 @@ async fn handle_meta_compute_result<PH: Provider>(
     debug!("Log: {:?}", log);
 
     let already_challenged = meta_challanged_jobs_map.contains_key(&meta_compute_res.computeId);
+    if already_challenged {
+        return Ok(());
+    }
 
     let block = provider
         .get_block(BlockId::Number(BlockNumberOrTag::Latest))
@@ -73,9 +76,6 @@ async fn handle_meta_compute_result<PH: Provider>(
         .await
         .map_err(|e| NodeError::TxError(format!("{e:}")))?
         .ok_or_else(|| NodeError::TxError("Log block not found".to_string()))?;
-    if already_challenged {
-        return Ok(());
-    }
 
     if !meta_compute_request_map.contains_key(&meta_compute_res.computeId) {
         return Ok(());
@@ -270,10 +270,6 @@ async fn handle_meta_compute_result<PH: Provider>(
     let mut global_result = true;
     let mut sub_job_failed = 0;
 
-    let commitments: Vec<String> = meta_result
-        .iter()
-        .map(|res| res.commitment.clone())
-        .collect();
     for (i, compute_res) in meta_result.iter().enumerate() {
         let trust_id = job_description[i].trust_id.clone();
         let seed_id = job_description[i].seed_id.clone();
@@ -334,6 +330,10 @@ async fn handle_meta_compute_result<PH: Provider>(
 
     info!("STAGE 2 complete: Verification compute done.");
 
+    let commitments: Vec<String> = meta_result
+        .iter()
+        .map(|res| res.commitment.clone())
+        .collect();
     let commitment_tree = DenseMerkleTree::<Keccak256>::new(
         commitments
             .iter()

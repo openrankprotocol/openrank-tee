@@ -16,4 +16,5 @@ WORKDIR /app
 # Copy the binaries from the builder stage
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/openrank-app .
 
+# Default entrypoint - can be overridden at runtime
 ENTRYPOINT ["/app/openrank-app"]
