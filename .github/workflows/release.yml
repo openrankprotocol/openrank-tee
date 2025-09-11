@@ -89,13 +89,6 @@ jobs:
                       target
                   key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-            - name: Set up environment variables
-              run: |
-                  echo "CHAIN_RPC_URL=${{ secrets.CHAIN_RPC_URL }}" >> $GITHUB_ENV
-                  echo "OPENRANK_MANAGER_ADDRESS=${{ secrets.OPENRANK_MANAGER_ADDRESS }}" >> $GITHUB_ENV
-                  echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
-                  echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
-
             - name: Set up Windows OpenSSL environment
               if: matrix.os == 'windows-latest'
               run: |
@@ -111,6 +104,11 @@ jobs:
                   fi
                   cargo build --release --target ${{ matrix.target }} -p openrank
               shell: bash
+              env:
+                  CHAIN_RPC_URL: ${{ secrets.CHAIN_RPC_URL }}
+                  OPENRANK_MANAGER_ADDRESS: ${{ secrets.OPENRANK_MANAGER_ADDRESS }}
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
             - name: Strip binary (Linux and macOS)
               if: matrix.os != 'windows-latest'
