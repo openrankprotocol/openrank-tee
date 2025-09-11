@@ -61,6 +61,25 @@ jobs:
                   sudo apt-get update
                   sudo apt-get install -y gcc-aarch64-linux-gnu
 
+            - name: Setup vcpkg and OpenSSL for Windows
+              if: matrix.os == 'windows-latest'
+              run: |
+                  # Determine vcpkg triplet based on target architecture
+                  if ("${{ matrix.target }}" -eq "x86_64-pc-windows-msvc") {
+                      $triplet = "x64-windows-static"
+                  } else {
+                      $triplet = "arm64-windows-static"
+                  }
+
+                  # Install OpenSSL using vcpkg
+                  vcpkg install openssl:$triplet
+
+                  # Set environment variables for OpenSSL
+                  echo "OPENSSL_DIR=C:\vcpkg\installed\$triplet" >> $env:GITHUB_ENV
+                  echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+                  echo "VCPKG_ROOT=C:\vcpkg" >> $env:GITHUB_ENV
+              shell: powershell
+
             - name: Cache cargo registry
               uses: actions/cache@v4
               with:
@@ -76,6 +95,12 @@ jobs:
                   echo "OPENRANK_MANAGER_ADDRESS=${{ secrets.OPENRANK_MANAGER_ADDRESS }}" >> $GITHUB_ENV
                   echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> $GITHUB_ENV
                   echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> $GITHUB_ENV
+
+            - name: Set up Windows OpenSSL environment
+              if: matrix.os == 'windows-latest'
+              run: |
+                  echo "OPENSSL_NO_VENDOR=1" >> $env:GITHUB_ENV
+              shell: powershell
 
             - name: Build binary
               run: |
