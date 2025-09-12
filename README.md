@@ -6,30 +6,16 @@ A decentralized reputation computation protocol leveraging Trusted Execution Env
 
 ### One-liner Installation
 
-**Smart Install (Recommended - Auto-detects best method):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install-auto.sh | bash
-```
-
-**Manual Method Selection:**
-
-*Linux/macOS (Regular):*
+**Linux/macOS:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install.sh | bash
 ```
 
-*Linux (Static - No Dependencies):*
-```bash
-curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install-static.sh | bash
-```
-
-> **Note:** The smart installer automatically chooses static builds for older Linux systems and regular builds for modern systems. Use manual selection if you encounter glibc compatibility errors like `GLIBC_2.39 not found`.
+> **Note:** Use the static version if you encounter glibc compatibility errors like `GLIBC_2.39 not found`.
 
 ### Manual Installation
 
 1. **Download pre-compiled binary** from [Releases](https://github.com/openrankprotocol/openrank-tee/releases)
-   - **Regular builds**: `openrank-linux-amd64`, `openrank-macos-amd64`, etc.
-   - **Static builds**: `openrank-linux-amd64-static`, `openrank-linux-arm64-static` (Linux only, no dependencies)
 2. **Make executable** (Linux/macOS): `chmod +x openrank-*`  
 3. **Move to PATH**: `sudo mv openrank-* /usr/local/bin/openrank`
 
@@ -308,10 +294,7 @@ If you encounter errors like:
 openrank: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.39' not found
 ```
 
-**Solution**: Use the static build instead:
-```bash
-curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install-static.sh | bash
-```
+**Solution**: Download the static build manually from [Releases](https://github.com/openrankprotocol/openrank-tee/releases) (files ending with `-static`).
 
 #### Binary Not Found in PATH
 If `openrank --help` returns "command not found":
@@ -323,16 +306,10 @@ If `openrank --help` returns "command not found":
 #### Permission Denied
 If you get permission errors during installation:
 
-1. **Install to user directory**: `./install.sh --dir ~/.local/bin`
+1. **Install to user directory**: `curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/scripts/install.sh | bash -s -- --dir ~/.local/bin`
 2. **Make sure directory is in PATH**: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc`
 
-#### Which Build Should I Use?
 
-| Build Type | When to Use | Pros | Cons |
-|------------|-------------|------|------|
-| Regular (`openrank-linux-amd64`) | Modern Linux systems | Smaller size, faster startup | May have glibc compatibility issues |
-| Static (`openrank-linux-amd64-static`) | Older Linux systems, containers | Works everywhere, no dependencies | Larger size |
-| macOS/Windows | Non-Linux platforms | Native performance | Platform-specific |
 
 ## Contributing
 

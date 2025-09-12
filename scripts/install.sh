@@ -11,8 +11,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 REPO="openrankprotocol/openrank-tee"
-BINARY_NAME="openrank"
-INSTALL_DIR="/usr/local/bin"
+SCRIPTS_BASE_URL="https://raw.githubusercontent.com/${REPO}/main/scripts"
 
 # Print colored output
 print_status() {
@@ -31,224 +30,175 @@ print_warning() {
     echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
-# Detect OS and architecture
-detect_platform() {
-    local os=""
-    local arch=""
-
-    case "$(uname -s)" in
-        Linux*)     os="linux" ;;
-        Darwin*)    os="macos" ;;
-        CYGWIN*|MINGW*|MSYS*) os="windows" ;;
-        *)
-            print_error "Unsupported operating system: $(uname -s)"
-            exit 1
-            ;;
-    esac
-
-    case "$(uname -m)" in
-        x86_64|amd64)   arch="amd64" ;;
-        aarch64|arm64)  arch="arm64" ;;
-        *)
-            print_error "Unsupported architecture: $(uname -m)"
-            exit 1
-            ;;
-    esac
-
-    if [ "$os" = "windows" ]; then
-        echo "${BINARY_NAME}-${os}-${arch}.exe"
-    else
-        echo "${BINARY_NAME}-${os}-${arch}"
-    fi
-}
-
 # Check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Download file with progress
-download_file() {
-    local url="$1"
-    local output="$2"
+# Check glibc version compatibility
+check_glibc_compatibility() {
+    if ! command_exists ldd; then
+        return 1  # Can't determine, assume incompatible
+    fi
+
+    local glibc_version
+    glibc_version=$(ldd --version 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+' | head -n1)
+
+    if [ -z "$glibc_version" ]; then
+        return 1  # Can't determine version
+    fi
+
+    print_status "Detected glibc version: $glibc_version"
+
+    # Parse version components
+    local major minor
+    major=$(echo "$glibc_version" | cut -d. -f1)
+    minor=$(echo "$glibc_version" | cut -d. -f2)
+
+    # Check if glibc is recent enough (2.32+)
+    # This is a conservative threshold where most modern builds should work
+    if [ "$major" -gt 2 ] || { [ "$major" -eq 2 ] && [ "$minor" -ge 32 ]; }; then
+        return 0  # Compatible
+    else
+        return 1  # Incompatible
+    fi
+}
+
+# Detect the best installation method
+detect_installation_method() {
+    local os
+    os=$(uname -s)
+
+    case "$os" in
+        Linux*)
+            print_status "Detected Linux system"
+
+            # Check architecture
+            local arch
+            arch=$(uname -m)
+            case "$arch" in
+                x86_64|amd64|aarch64|arm64)
+                    print_status "Architecture $arch supports static builds"
+                    ;;
+                *)
+                    print_warning "Architecture $arch may not support static builds"
+                    echo "regular"
+                    return
+                    ;;
+            esac
+
+            # Check glibc compatibility
+            if check_glibc_compatibility; then
+                print_status "glibc version is compatible with regular builds"
+                echo "regular"
+            else
+                print_warning "glibc version may cause compatibility issues"
+                print_status "Recommending static build for better compatibility"
+                echo "static"
+            fi
+            ;;
+        Darwin*)
+            print_status "Detected macOS system - using regular installer"
+            echo "regular"
+            ;;
+        CYGWIN*|MINGW*|MSYS*)
+            print_status "Detected Windows system - using regular installer"
+            echo "regular"
+            ;;
+        *)
+            print_warning "Unknown operating system: $os"
+            print_status "Defaulting to regular installer"
+            echo "regular"
+            ;;
+    esac
+}
+
+# Download and execute the appropriate install script
+run_installer() {
+    local method="$1"
+    shift  # Remove method from arguments, pass rest to installer
+
+    local script_name
+    case "$method" in
+        static)
+            script_name="install-static.sh"
+            print_status "Using static installer (no external dependencies)"
+            ;;
+        regular)
+            script_name="install-regular.sh"
+            print_status "Using regular installer"
+            ;;
+        *)
+            print_error "Unknown installation method: $method"
+            exit 1
+            ;;
+    esac
+
+    local script_url="${SCRIPTS_BASE_URL}/${script_name}"
+
+    print_status "Downloading and executing $script_name..."
+    print_status "URL: $script_url"
 
     if command_exists curl; then
-        curl -fsSL --progress-bar "$url" -o "$output"
+        curl -fsSL "$script_url" | bash -s -- "$@"
     elif command_exists wget; then
-        wget --progress=bar:force -O "$output" "$url"
+        wget -qO- "$script_url" | bash -s -- "$@"
     else
         print_error "Neither curl nor wget found. Please install one of them."
         exit 1
     fi
 }
 
-# Get latest release version
-get_latest_version() {
-    local api_url="https://api.github.com/repos/${REPO}/releases/latest"
-
-    if command_exists curl; then
-        curl -fsSL "$api_url" | grep '"tag_name"' | cut -d'"' -f4
-    elif command_exists wget; then
-        wget -qO- "$api_url" | grep '"tag_name"' | cut -d'"' -f4
-    else
-        print_error "Neither curl nor wget found. Cannot fetch latest version."
-        exit 1
-    fi
-}
-
-# Verify checksum
-verify_checksum() {
-    local file="$1"
-    local checksums_file="$2"
-
-    if [ ! -f "$checksums_file" ]; then
-        print_warning "Checksums file not found. Skipping verification."
-        return 0
-    fi
-
-    if command_exists sha256sum; then
-        local expected_hash=$(grep "$(basename "$file")" "$checksums_file" | cut -d' ' -f1)
-        local actual_hash=$(sha256sum "$file" | cut -d' ' -f1)
-
-        if [ "$expected_hash" = "$actual_hash" ]; then
-            print_success "Checksum verification passed"
-            return 0
-        else
-            print_error "Checksum verification failed"
-            print_error "Expected: $expected_hash"
-            print_error "Actual:   $actual_hash"
-            return 1
-        fi
-    else
-        print_warning "sha256sum not found. Skipping checksum verification."
-        return 0
-    fi
-}
-
-# Main installation function
-install_openrank() {
-    local version="$1"
-    local force_install="$2"
-
-    print_status "Starting OpenRank CLI installation..."
-
-    # Detect platform
-    local asset_name
-    asset_name=$(detect_platform)
-    print_status "Detected platform: $asset_name"
-
-    # Get version
-    if [ -z "$version" ]; then
-        print_status "Fetching latest version..."
-        version=$(get_latest_version)
-        if [ -z "$version" ]; then
-            print_error "Failed to fetch latest version"
-            exit 1
-        fi
-    fi
-
-    print_status "Installing version: $version"
-
-    # Check if already installed
-    if command_exists "$BINARY_NAME" && [ "$force_install" != "true" ]; then
-        local current_version
-        current_version=$($BINARY_NAME --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
-
-        if [ "$current_version" = "$version" ]; then
-            print_success "OpenRank CLI $version is already installed"
-            exit 0
-        else
-            print_warning "OpenRank CLI $current_version is already installed"
-            echo "Use --force to overwrite or specify a different version"
-            exit 1
-        fi
-    fi
-
-    # Create temporary directory
-    local tmp_dir
-    tmp_dir=$(mktemp -d)
-    trap "rm -rf '$tmp_dir'" EXIT
-
-    # Download URLs
-    local base_url="https://github.com/${REPO}/releases/download/${version}"
-    local binary_url="${base_url}/${asset_name}"
-    local checksums_url="${base_url}/checksums.txt"
-
-    print_status "Downloading $asset_name..."
-    download_file "$binary_url" "$tmp_dir/$asset_name"
-
-    # Download checksums
-    print_status "Downloading checksums..."
-    download_file "$checksums_url" "$tmp_dir/checksums.txt" || print_warning "Failed to download checksums"
-
-    # Verify checksum
-    if ! verify_checksum "$tmp_dir/$asset_name" "$tmp_dir/checksums.txt"; then
-        print_error "Installation aborted due to checksum mismatch"
-        exit 1
-    fi
-
-    # Make binary executable
-    chmod +x "$tmp_dir/$asset_name"
-
-    # Install binary
-    if [ -w "$INSTALL_DIR" ]; then
-        mv "$tmp_dir/$asset_name" "$INSTALL_DIR/$BINARY_NAME"
-    else
-        print_status "Installing to $INSTALL_DIR (requires sudo)..."
-        sudo mv "$tmp_dir/$asset_name" "$INSTALL_DIR/$BINARY_NAME"
-    fi
-
-    print_success "OpenRank CLI $version installed successfully!"
-    print_status "Binary location: $INSTALL_DIR/$BINARY_NAME"
-
-    # Verify installation
-    if command_exists "$BINARY_NAME"; then
-        print_success "Installation verified. Run '$BINARY_NAME --help' to get started."
-    else
-        print_warning "Binary installed but not found in PATH. You may need to add $INSTALL_DIR to your PATH."
-    fi
-}
-
 # Show usage information
 show_usage() {
     cat << EOF
-OpenRank CLI Installation Script
+OpenRank CLI Smart Installation Script
+
+This script automatically detects the best installation method for your system:
+- Linux with old glibc: Uses static builds (no dependencies)
+- Linux with modern glibc: Uses regular builds (smaller, faster)
+- macOS/Windows: Uses regular builds (platform native)
 
 USAGE:
     $0 [OPTIONS]
 
 OPTIONS:
-    -v, --version VERSION    Install specific version (e.g., v1.0.0)
-    -f, --force              Force installation even if already installed
-    -d, --dir DIR           Installation directory (default: /usr/local/bin)
-    -h, --help              Show this help message
+    --method METHOD         Force specific method: 'regular' or 'static'
+    -v, --version VERSION   Install specific version (e.g., v1.0.0)
+    -f, --force             Force installation even if already installed
+    -d, --dir DIR          Installation directory (default: /usr/local/bin)
+    -h, --help             Show this help message
 
 EXAMPLES:
-    $0                      # Install latest version
-    $0 --version v1.0.0     # Install specific version
-    $0 --force              # Force reinstall latest version
-    $0 --dir ~/.local/bin   # Install to custom directory
+    $0                          # Auto-detect best method
+    $0 --method static          # Force static build
+    $0 --method regular         # Force regular build
+    $0 --version v1.0.0         # Install specific version (auto-detect method)
+    $0 --force --dir ~/.local/bin  # Force reinstall to custom directory
+
+DETECTION LOGIC:
+    - Linux + glibc < 2.32 → Static build (universal compatibility)
+    - Linux + glibc ≥ 2.32 → Regular build (smaller, faster)
+    - macOS/Windows → Regular build (platform native)
+    - Unknown/unsupported → Regular build (fallback)
 
 EOF
 }
 
-# Parse command line arguments
+# Main function
 main() {
-    local version=""
-    local force_install="false"
+    local forced_method=""
+    local installer_args=()
 
+    # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -v|--version)
-                version="$2"
-                shift 2
-                ;;
-            -f|--force)
-                force_install="true"
-                shift
-                ;;
-            -d|--dir)
-                INSTALL_DIR="$2"
+            --method)
+                forced_method="$2"
+                if [[ "$forced_method" != "regular" && "$forced_method" != "static" ]]; then
+                    print_error "Invalid method: $forced_method (must be 'regular' or 'static')"
+                    exit 1
+                fi
                 shift 2
                 ;;
             -h|--help)
@@ -256,21 +206,33 @@ main() {
                 exit 0
                 ;;
             *)
-                print_error "Unknown option: $1"
-                echo
-                show_usage
-                exit 1
+                # Pass through all other arguments to the installer
+                installer_args+=("$1")
+                shift
                 ;;
         esac
     done
 
-    # Check if install directory exists
-    if [ ! -d "$INSTALL_DIR" ]; then
-        print_error "Installation directory does not exist: $INSTALL_DIR"
-        exit 1
+    print_status "OpenRank CLI Smart Installer"
+    print_status "Analyzing system for optimal installation method..."
+    echo
+
+    # Determine installation method
+    local method
+    if [ -n "$forced_method" ]; then
+        method="$forced_method"
+        print_status "Using forced method: $method"
+    else
+        method=$(detect_installation_method)
+        print_success "Recommended installation method: $method"
     fi
 
-    install_openrank "$version" "$force_install"
+    echo
+    print_status "Proceeding with $method installation..."
+    echo
+
+    # Run the appropriate installer with remaining arguments
+    run_installer "$method" "${installer_args[@]}"
 }
 
 # Run main function with all arguments

@@ -133,22 +133,42 @@ jobs:
                 include:
                     - target: x86_64-unknown-linux-musl
                       asset_name: openrank-linux-amd64-static
+                      docker_image: messense/rust-musl-cross:x86_64-musl
                     - target: aarch64-unknown-linux-musl
                       asset_name: openrank-linux-arm64-static
+                      docker_image: messense/rust-musl-cross:aarch64-musl
 
         steps:
             - uses: actions/checkout@v4
 
-            - name: Build static binary using cross
+            - name: Cache cargo registry
+              uses: actions/cache@v4
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                      target
+                  key: static-${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+            - name: Build static binary in Docker
               run: |
-                  cargo install cross --git https://github.com/cross-rs/cross
-                  cross build --release --target ${{ matrix.target }} -p openrank
+                  docker run --rm -t \
+                    -v $PWD:/home/rust/src \
+                    -v $HOME/.cargo/registry:/home/rust/.cargo/registry \
+                    -v $HOME/.cargo/git:/home/rust/.cargo/git \
+                    -e CHAIN_RPC_URL="${{ secrets.CHAIN_RPC_URL }}" \
+                    -e OPENRANK_MANAGER_ADDRESS="${{ secrets.OPENRANK_MANAGER_ADDRESS }}" \
+                    -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" \
+                    -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" \
+                    ${{ matrix.docker_image }} \
+                    cargo build --release --target ${{ matrix.target }} -p openrank
 
             - name: Strip binary
               run: |
-                  docker run --rm -v $PWD:/workspace -w /workspace \
-                    ghcr.io/cross-rs/cross:${{ matrix.target }} \
-                    strip /workspace/target/${{ matrix.target }}/release/openrank
+                  docker run --rm -t \
+                    -v $PWD:/home/rust/src \
+                    ${{ matrix.docker_image }} \
+                    strip /home/rust/src/target/${{ matrix.target }}/release/openrank
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
