@@ -186,11 +186,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    let rpc_url = env!("CHAIN_RPC_URL");
-    let manager_address = env!("OPENRANK_MANAGER_ADDRESS");
-    let aws_access_key_id = env!("AWS_ACCESS_KEY_ID");
-    let aws_secret_access_key = env!("AWS_SECRET_ACCESS_KEY");
-    let credentials = Credentials::from_keys(aws_access_key_id, aws_secret_access_key, None);
+    let rpc_url = option_env!("CHAIN_RPC_URL")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("CHAIN_RPC_URL").ok())
+        .expect("CHAIN_RPC_URL must be set at compile time or runtime");
+    let manager_address = option_env!("OPENRANK_MANAGER_ADDRESS")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("OPENRANK_MANAGER_ADDRESS").ok())
+        .expect("OPENRANK_MANAGER_ADDRESS must be set at compile time or runtime");
+    let aws_access_key_id = option_env!("AWS_ACCESS_KEY_ID")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("AWS_ACCESS_KEY_ID").ok())
+        .expect("AWS_ACCESS_KEY_ID must be set at compile time or runtime");
+    let aws_secret_access_key = option_env!("AWS_SECRET_ACCESS_KEY")
+        .map(|s| s.to_string())
+        .or_else(|| std::env::var("AWS_SECRET_ACCESS_KEY").ok())
+        .expect("AWS_SECRET_ACCESS_KEY must be set at compile time or runtime");
+    let credentials = Credentials::from_keys(&aws_access_key_id, &aws_secret_access_key, None);
     let config = SdkConfig::builder()
         .region(Some(Region::new("us-west-2")))
         .credentials_provider(SharedCredentialsProvider::new(credentials))
@@ -214,7 +226,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let compute_id_uint = Uint::<256, 4>::from_str(&compute_id).unwrap();
             let compute_request = manager_contract
@@ -265,7 +277,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let current_block = provider.get_block_number().await.unwrap();
             let starting_block = (current_block - BLOCK_NUMBER_HISTORY).max(0);
@@ -349,7 +361,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(rpc_url).unwrap()));
+                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
 
             let trust_paths = read_dir(trust_folder_path).unwrap();
