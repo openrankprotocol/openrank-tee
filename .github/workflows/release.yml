@@ -163,12 +163,22 @@ jobs:
                     ${{ matrix.docker_image }} \
                     cargo build --release --target ${{ matrix.target }} -p openrank
 
-            - name: Strip binary
+            - name: Verify binary
               run: |
-                  docker run --rm -t \
-                    -v $PWD:/home/rust/src \
-                    ${{ matrix.docker_image }} \
-                    strip /home/rust/src/target/${{ matrix.target }}/release/openrank
+                  if [ -f "target/${{ matrix.target }}/release/openrank" ]; then
+                    echo "✓ Binary built successfully"
+                    ls -la "target/${{ matrix.target }}/release/openrank"
+                  else
+                    echo "❌ Binary not found"
+                    ls -la "target/${{ matrix.target }}/release/" || echo "Release directory not found"
+                    exit 1
+                  fi
+
+            - name: Strip binary (optional)
+              run: |
+                  # Try to strip with host tools, ignore failures
+                  strip "target/${{ matrix.target }}/release/openrank" 2>/dev/null || echo "Strip not available or failed - continuing with unstripped binary"
+              continue-on-error: true
 
             - name: Upload artifact
               uses: actions/upload-artifact@v4
