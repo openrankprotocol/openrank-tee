@@ -13,15 +13,15 @@ services:
             - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
         restart: unless-stopped
 
-    openrank-challenger:
-        image: lazovicff/openrank-computer@sha256:0d5341f545bec909d997380c2824ceaeb3717a7913172987d5758e673703d717
-        command: ["--challenger"]
-        environment:
-            # Set your mnemonic here or use secrets management
-            - RUST_LOG=info
-            - MNEMONIC=${MNEMONIC}
-            - OPENRANK_MANAGER_ADDRESS=${OPENRANK_MANAGER_ADDRESS}
-            - CHAIN_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
-            - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-            - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-        restart: unless-stopped
+    # openrank-challenger:
+    #     image: lazovicff/openrank-computer@sha256:0d5341f545bec909d997380c2824ceaeb3717a7913172987d5758e673703d717
+    #     command: ["--challenger"]
+    #     environment:
+    #         # Set your mnemonic here or use secrets management
+    #         - RUST_LOG=info
+    #         - MNEMONIC=${MNEMONIC}
+    #         - OPENRANK_MANAGER_ADDRESS=${OPENRANK_MANAGER_ADDRESS}
+    #         - CHAIN_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_API_KEY}
+    #         - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    #         - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    #     restart: unless-stopped
