@@ -1,5 +1,7 @@
 # OpenRank TEE Protocol
 
+![OpenRank Logo](./assets/or-github-bg.png)
+
 A decentralized reputation computation protocol leveraging Trusted Execution Environments (TEEs) and EigenLayer for secure, verifiable PageRank-style calculations.
 
 ## Quick Install
@@ -16,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/openrankprotocol/openrank-tee/main/
 ### Manual Installation
 
 1. **Download pre-compiled binary** from [Releases](https://github.com/openrankprotocol/openrank-tee/releases)
-2. **Make executable** (Linux/macOS): `chmod +x openrank-*`  
+2. **Make executable** (Linux/macOS): `chmod +x openrank-*`
 3. **Move to PATH**: `sudo mv openrank-* /usr/local/bin/openrank`
 
 ### Usage

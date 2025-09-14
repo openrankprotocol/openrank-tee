@@ -76,7 +76,7 @@ async fn handle_meta_compute_request<PH: Provider>(
     )
     .await?;
     info!(
-        "MetaComputeRequestEvent: JobDescriptionId({})",
+        "MetaComputeRequestEvent: ComputeId({})",
         meta_compute_req.computeId.to_string()
     );
     debug!("Log: {:?}", log);
