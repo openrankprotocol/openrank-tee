@@ -341,6 +341,7 @@ async fn handle_meta_compute_request<PH: Provider>(
         .await
         .map_err(|e| NodeError::TxError(format!("{e:}")))?;
     let tx_hash = res
+        .with_timeout(Some(Duration::from_secs(60)))
         .watch()
         .await
         .map_err(|e| NodeError::TxError(format!("{e:}")))?;
@@ -363,7 +364,10 @@ pub async fn run<PH: Provider>(
     block_history: u64,
     log_pull_seconds: u64,
 ) -> Result<(), NodeError> {
-    let current_block = provider.get_block_number().await.unwrap();
+    let current_block = provider
+        .get_block_number()
+        .await
+        .map_err(|e| NodeError::TxError(format!("Failed to get block number: {}", e)))?;
     let starting_block = current_block - block_history;
     // Meta jobs events
     let meta_compute_result_filter = contract
@@ -382,20 +386,24 @@ pub async fn run<PH: Provider>(
     let result_logs = provider
         .get_logs(&meta_compute_result_filter)
         .await
-        .unwrap();
+        .map_err(|e| NodeError::TxError(format!("Failed to get result logs: {}", e)))?;
     let request_logs = provider
         .get_logs(&meta_compute_request_filter)
         .await
-        .unwrap();
+        .map_err(|e| NodeError::TxError(format!("Failed to get request logs: {}", e)))?;
 
     let mut finished_jobs = HashSet::new();
     for log in result_logs {
-        let res: Log<MetaComputeResultEvent> = log.log_decode().unwrap();
+        let res: Log<MetaComputeResultEvent> = log
+            .log_decode()
+            .map_err(|e| NodeError::TxError(format!("Failed to decode result log: {}", e)))?;
         finished_jobs.insert(res.data().computeId);
     }
 
     for log in request_logs {
-        let res: Log<MetaComputeRequestEvent> = log.log_decode().unwrap();
+        let res: Log<MetaComputeRequestEvent> = log
+            .log_decode()
+            .map_err(|e| NodeError::TxError(format!("Failed to decode request log: {}", e)))?;
         if finished_jobs.contains(&res.data().computeId) {
             continue;
         }

@@ -392,8 +392,15 @@ pub async fn run<P: Provider>(
     block_history: u64,
     log_pull_seconds: u64,
 ) -> Result<(), NodeError> {
-    let challenge_window = manager_contract.CHALLENGE_WINDOW().call().await.unwrap();
-    let current_block = provider.get_block_number().await.unwrap();
+    let challenge_window = manager_contract
+        .CHALLENGE_WINDOW()
+        .call()
+        .await
+        .map_err(|e| NodeError::TxError(format!("Failed to get challenge window: {}", e)))?;
+    let current_block = provider
+        .get_block_number()
+        .await
+        .map_err(|e| NodeError::TxError(format!("Failed to get block number: {}", e)))?;
     let starting_block = current_block - block_history;
     let mut meta_compute_request_map = HashMap::new();
     let mut meta_challanged_jobs_map = HashMap::new();
@@ -419,30 +426,36 @@ pub async fn run<P: Provider>(
     let result_logs = provider
         .get_logs(&meta_compute_result_filter)
         .await
-        .unwrap();
+        .map_err(|e| NodeError::TxError(format!("Failed to get result logs: {}", e)))?;
     let request_logs = provider
         .get_logs(&meta_compute_request_filter)
         .await
-        .unwrap();
+        .map_err(|e| NodeError::TxError(format!("Failed to get request logs: {}", e)))?;
     let challenge_logs = provider
         .get_logs(&meta_compute_challenge_filter)
         .await
-        .unwrap();
+        .map_err(|e| NodeError::TxError(format!("Failed to get challenge logs: {}", e)))?;
 
     for log in request_logs {
-        let res: Log<MetaComputeRequestEvent> = log.log_decode().unwrap();
+        let res: Log<MetaComputeRequestEvent> = log
+            .log_decode()
+            .map_err(|e| NodeError::TxError(format!("Failed to decode request log: {}", e)))?;
         let compute_req = res.data();
         meta_compute_request_map.insert(compute_req.computeId, compute_req.clone());
     }
 
     for log in challenge_logs {
-        let res: Log<MetaChallengeEvent> = log.log_decode().unwrap();
+        let res: Log<MetaChallengeEvent> = log
+            .log_decode()
+            .map_err(|e| NodeError::TxError(format!("Failed to decode challenge log: {}", e)))?;
         let challenge = res.data();
         meta_challanged_jobs_map.insert(challenge.computeId, log);
     }
 
     for log in result_logs {
-        let res: Log<MetaComputeResultEvent> = log.log_decode().unwrap();
+        let res: Log<MetaComputeResultEvent> = log
+            .log_decode()
+            .map_err(|e| NodeError::TxError(format!("Failed to decode result log: {}", e)))?;
         let meta_compute_res = res.data();
         if let Err(e) = handle_meta_compute_result(
             &manager_contract,
