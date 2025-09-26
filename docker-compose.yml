@@ -2,7 +2,7 @@
 
 services:
     openrank-computer:
-        image: lazovicff/openrank-computer@sha256:9e257acbea596ecc28901cb9be8cee518741a977fde2b8ba22548859d8d1ce84
+        image: lazovicff/openrank-computer@sha256:a8b8169a9136518d0ed0db48c78ba307e994a08dffebb34fd876739de2c35c56
         environment:
             # Set your mnemonic here or use secrets management
             - RUST_LOG=info
@@ -14,7 +14,7 @@ services:
         restart: unless-stopped
 
     # openrank-challenger:
-    #     image: lazovicff/openrank-computer@sha256:9e257acbea596ecc28901cb9be8cee518741a977fde2b8ba22548859d8d1ce84
+    #     image: lazovicff/openrank-computer@sha256:a8b8169a9136518d0ed0db48c78ba307e994a08dffebb34fd876739de2c35c56
     #     command: ["--challenger"]
     #     environment:
     #         # Set your mnemonic here or use secrets management

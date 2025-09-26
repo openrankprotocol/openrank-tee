@@ -102,6 +102,10 @@ async fn handle_meta_compute_request<PH: Provider>(
             let bucket_name = bucket_name.clone();
             let trust_id = compute_req.trust_id.clone();
             let seed_id = compute_req.seed_id.clone();
+            let trust_id_bytes =
+                FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
+            let seed_id_bytes =
+                FixedBytes::<32>::from_slice(hex::decode(seed_id.clone()).unwrap().as_slice());
 
             tokio::spawn(async move {
                 let trust_file_path = format!("./trust/{}", trust_id);
@@ -110,10 +114,13 @@ async fn handle_meta_compute_request<PH: Provider>(
                 // Check if trust file already exists
                 let (trust_result, trust_downloaded) =
                     if tokio::fs::metadata(&trust_file_path).await.is_ok() {
-                        info!("Trust file already exists, skipping download: {}", trust_id);
+                        info!(
+                            "Trust file already exists, skipping download: TrustId({:#})",
+                            trust_id_bytes
+                        );
                         (Ok(()), false)
                     } else {
-                        info!("Downloading trust data for SubJob: TrustId({})", trust_id);
+                        info!("Downloading data: TrustId({:#})", trust_id_bytes);
                         (
                             download_trust_data_to_file(
                                 &s3_client,
@@ -129,10 +136,10 @@ async fn handle_meta_compute_request<PH: Provider>(
                 // Check if seed file already exists
                 let (seed_result, seed_downloaded) =
                     if tokio::fs::metadata(&seed_file_path).await.is_ok() {
-                        info!("Seed file already exists, skipping download: {}", seed_id);
+                        info!("Skipping download: SeedId({:#})", seed_id_bytes);
                         (Ok(()), false)
                     } else {
-                        info!("Downloading seed data for SubJob: SeedId({})", seed_id);
+                        info!("Downloading data: SeedId({:#})", seed_id);
                         (
                             download_seed_data_to_file(
                                 &s3_client,
@@ -206,10 +213,14 @@ async fn handle_meta_compute_request<PH: Provider>(
     for compute_req in meta_job {
         let trust_id = compute_req.trust_id.clone();
         let seed_id = compute_req.seed_id.clone();
+        let trust_id_bytes =
+            FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
+        let seed_id_bytes =
+            FixedBytes::<32>::from_slice(hex::decode(seed_id.clone()).unwrap().as_slice());
 
         info!(
-            "Computing scores for SubJob: TrustId({}), SeedId({})",
-            trust_id, seed_id
+            "Computing scores for SubJob: TrustId({:#}), SeedId({:#})",
+            trust_id_bytes, seed_id_bytes
         );
 
         let trust_file = File::open(&format!("./trust/{}", trust_id))
@@ -279,9 +290,11 @@ async fn handle_meta_compute_request<PH: Provider>(
             let s3_client = s3_client.clone();
             let bucket_name = bucket_name.clone();
             let scores_id = job_result.scores_id.clone();
+            let scores_id_bytes =
+                FixedBytes::<32>::from_slice(hex::decode(scores_id.clone()).unwrap().as_slice());
 
             tokio::spawn(async move {
-                info!("Uploading scores data for ScoresId({})", scores_id);
+                info!("Uploading scores data for ScoresId({:#})", scores_id_bytes);
 
                 let scores_file_path = format!("./scores/{}.csv", scores_id);
                 let upload_result = upload_file_to_s3_streaming(
@@ -294,7 +307,7 @@ async fn handle_meta_compute_request<PH: Provider>(
                 .map_err(|e| NodeError::FileError(format!("Failed to upload scores file: {}", e)));
 
                 if upload_result.is_ok() {
-                    info!("Upload complete for ScoresId({})", scores_id);
+                    info!("Upload complete for ScoresId({:#})", scores_id_bytes);
                 }
 
                 upload_result.map(|_| scores_id.clone())
@@ -340,13 +353,9 @@ async fn handle_meta_compute_request<PH: Provider>(
         .send()
         .await
         .map_err(|e| NodeError::TxError(format!("{e:}")))?;
-    let tx_hash = res
-        .with_timeout(Some(Duration::from_secs(60)))
-        .watch()
-        .await
-        .map_err(|e| NodeError::TxError(format!("{e:}")))?;
+    let tx_hash = *res.tx_hash();
     info!(
-        "'submitMetaComputeResult' completed: Tx Hash({:#})",
+        "'submitMetaComputeResult' submitted: Tx Hash({:#})",
         tx_hash
     );
 

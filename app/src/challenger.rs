@@ -9,7 +9,7 @@ use crate::{
 use crate::{JobDescription, JobResult};
 use alloy::eips::{BlockId, BlockNumberOrTag};
 use alloy::hex::{self, ToHexExt};
-use alloy::primitives::Uint;
+use alloy::primitives::{FixedBytes, Uint};
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
 use aws_sdk_s3::Client;
@@ -123,13 +123,19 @@ async fn handle_meta_compute_result<PH: Provider>(
                 // Check if trust file already exists
                 let (trust_result, trust_downloaded) =
                     if tokio::fs::metadata(&trust_file_path).await.is_ok() {
-                        info!("Trust file already exists, skipping download: {}", trust_id);
+                        let trust_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(trust_id.clone()).unwrap().as_slice(),
+                        );
+                        info!(
+                            "Trust file already exists, skipping download: TrustId({:#})",
+                            trust_id_bytes
+                        );
                         (Ok(()), false)
                     } else {
-                        info!(
-                            "Downloading trust data for Job {}: TrustId({})",
-                            i, trust_id
+                        let trust_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(trust_id.clone()).unwrap().as_slice(),
                         );
+                        info!("Downloading data: TrustId({:#})", trust_id_bytes);
                         (
                             download_trust_data_to_file(
                                 &s3_client,
@@ -145,10 +151,16 @@ async fn handle_meta_compute_result<PH: Provider>(
                 // Check if seed file already exists
                 let (seed_result, seed_downloaded) =
                     if tokio::fs::metadata(&seed_file_path).await.is_ok() {
-                        info!("Seed file already exists, skipping download: {}", seed_id);
+                        let seed_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(seed_id.clone()).unwrap().as_slice(),
+                        );
+                        info!("Skipping download: SeedId({:#})", seed_id_bytes);
                         (Ok(()), false)
                     } else {
-                        info!("Downloading seed data for Job {}: SeedId({})", i, seed_id);
+                        let seed_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(seed_id.clone()).unwrap().as_slice(),
+                        );
+                        info!("Downloading data: SeedId({:#})", seed_id_bytes);
                         (
                             download_seed_data_to_file(
                                 &s3_client,
@@ -164,16 +176,19 @@ async fn handle_meta_compute_result<PH: Provider>(
                 // Check if scores file already exists
                 let (scores_result, scores_downloaded) =
                     if tokio::fs::metadata(&scores_file_path).await.is_ok() {
+                        let scores_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(scores_id.clone()).unwrap().as_slice(),
+                        );
                         info!(
-                            "Scores file already exists, skipping download: {}",
-                            scores_id
+                            "Scores file already exists, skipping download: ScoresId({:#})",
+                            scores_id_bytes
                         );
                         (Ok(()), false)
                     } else {
-                        info!(
-                            "Downloading scores data for Job {}: ScoresId({})",
-                            i, scores_id
+                        let scores_id_bytes = FixedBytes::<32>::from_slice(
+                            hex::decode(scores_id.clone()).unwrap().as_slice(),
                         );
+                        info!("Downloading scores data: ScoresId({:#})", scores_id_bytes);
                         (
                             download_scores_data_to_file(
                                 &s3_client,
@@ -276,9 +291,16 @@ async fn handle_meta_compute_result<PH: Provider>(
         let scores_id = compute_res.scores_id.clone();
         let commitment = compute_res.commitment.clone();
 
+        let trust_id_bytes =
+            FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
+        let seed_id_bytes =
+            FixedBytes::<32>::from_slice(hex::decode(seed_id.clone()).unwrap().as_slice());
+        let scores_id_bytes =
+            FixedBytes::<32>::from_slice(hex::decode(scores_id.clone()).unwrap().as_slice());
+
         info!(
-            "Running verification for Job {}: TrustId({}), SeedId({}), ScoresId({})",
-            i, trust_id, seed_id, scores_id
+            "Computing scores for SubJob: TrustId({:#}), SeedId({:#}), ScoresId({:#})",
+            trust_id_bytes, seed_id_bytes, scores_id_bytes
         );
 
         let trust_file = File::open(&format!("./trust/{}", trust_id))
@@ -319,7 +341,16 @@ async fn handle_meta_compute_result<PH: Provider>(
             .verify_job(mock_domain, Hash::from_slice(i.to_be_bytes().as_slice()))
             .map_err(NodeError::VerificationRunnerError)?;
 
-        info!("Verification completed for Job {}: Result({})", i, result);
+        let commitment_bytes = FixedBytes::<32>::from_slice(
+            hex::decode(commitment.clone())
+                .map_err(|e| NodeError::HexError(e))?
+                .as_slice(),
+        );
+
+        info!(
+            "Core compute completed: ScoresId({:#}), Commitment({:#})",
+            scores_id_bytes, commitment_bytes
+        );
 
         if !result {
             global_result = false;
@@ -367,14 +398,8 @@ async fn handle_meta_compute_result<PH: Provider>(
             .send()
             .await;
         if let Ok(res) = res {
-            match res.watch().await {
-                Ok(tx_res) => {
-                    info!("'metaSubmitChallenge' completed. Tx Hash({:#})", tx_res);
-                }
-                Err(e) => {
-                    error!("Failed to watch transaction: {}", e);
-                }
-            }
+            let tx_hash = *res.tx_hash();
+            info!("'metaSubmitChallenge' submitted. Tx Hash({:#})", tx_hash);
         } else {
             let err = res.unwrap_err();
             error!("'metaSubmitChallenge' failed. {}", err);

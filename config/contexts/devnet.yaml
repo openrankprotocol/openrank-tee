@@ -203,6 +203,6 @@ context:
   artifact:
     artifactId: sha256:b96c2fc5fe2423c0889de361fca82d344f6b7ad1e3821713f34f9ebd1ecb95b4
     component: compose
-    digest: sha256:d87929cad847c2ba51b18a4765ebbae2685c174c534e2c3a23cf5e15d525d94e
+    digest: sha256:6278def89dd50d599c219191e640ddb79fad98c6127e8cece92e9efc4b350017
     registry: ""
     version: ""
