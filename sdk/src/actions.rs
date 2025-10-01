@@ -128,7 +128,7 @@ pub async fn download_scores(
     scores_id: String,
     path: String,
 ) -> Result<(), AwsError> {
-    let mut file = File::create(path).unwrap();
+    // Download the scores data from S3
     let mut res = client
         .get_object()
         .bucket(BUCKET_NAME)
@@ -136,9 +136,61 @@ pub async fn download_scores(
         .send()
         .await?;
     debug!("{:?}", res);
+
+    // Collect all bytes into a vector
+    let mut csv_bytes = Vec::new();
     while let Some(bytes) = res.body.next().await {
-        file.write(&bytes.unwrap()).unwrap();
+        csv_bytes.extend_from_slice(&bytes.unwrap());
     }
+
+    // Parse CSV bytes into ScoreEntry objects
+    let mut scores = parse_csv_to_scores(&csv_bytes).expect("Failed to parse CSV data");
+
+    // Sort scores from highest to lowest value
+    scores.sort_by(|a, b| {
+        b.value()
+            .partial_cmp(a.value())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Write sorted scores to CSV file
+    write_scores_to_csv(&scores, &path).expect("Failed to write CSV file");
+
+    Ok(())
+}
+
+/// Parse CSV bytes into a vector of ScoreEntry objects
+fn parse_csv_to_scores(csv_bytes: &[u8]) -> Result<Vec<ScoreEntry>, csv::Error> {
+    let mut reader = csv::Reader::from_reader(csv_bytes);
+    let mut scores = Vec::new();
+
+    for result in reader.records() {
+        let record = result?;
+        let id: String = record.get(0).unwrap_or("").to_string();
+        let value: f32 = record.get(1).unwrap_or("0.0").parse().unwrap_or(0.0);
+        scores.push(ScoreEntry::new(id, value));
+    }
+
+    Ok(scores)
+}
+
+/// Write ScoreEntry objects to CSV file with i,v headers
+fn write_scores_to_csv(
+    scores: &[ScoreEntry],
+    file_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let file = File::create(file_path)?;
+    let mut wtr = csv::Writer::from_writer(file);
+
+    // Write header
+    wtr.write_record(&["i", "v"])?;
+
+    // Write scores
+    for score in scores {
+        wtr.write_record(&[score.id(), &score.value().to_string()])?;
+    }
+
+    wtr.flush()?;
     Ok(())
 }
 

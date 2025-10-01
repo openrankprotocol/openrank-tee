@@ -113,33 +113,38 @@ impl JobMetadata {
 #[derive(Debug, Clone, Subcommand)]
 /// The method to call.
 enum Method {
+    #[command(about = "Download computed scores for a specific compute job")]
     DownloadScores {
         compute_id: String,
         #[arg(long)]
         out_dir: Option<String>,
     },
+    #[command(about = "Watch for compute job completion and download results")]
     ComputeWatch {
         compute_id: String,
         #[arg(long)]
         out_dir: Option<String>,
     },
+    #[command(about = "Submit a compute request with trust and seed data")]
     ComputeRequest {
         trust_folder_path: String,
         seed_folder_path: String,
     },
+    #[command(about = "Compute OpenRank scores locally using trust and seed data")]
     ComputeLocal {
         trust_path: String,
         seed_path: String,
         output_path: Option<String>,
     },
+    #[command(about = "Verify computed scores against trust and seed data")]
     VerifyLocal {
         trust_path: String,
         seed_path: String,
         scores_path: String,
     },
-    Init {
-        path: String,
-    },
+    #[command(about = "Initialize a new OpenRank project configuration")]
+    Init { path: String },
+    #[command(about = "Display the current OpenRank manager contract address")]
     ShowManagerAddress,
 }
 
@@ -400,8 +405,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .submitMetaComputeRequest(meta_id_bytes)
                 .call()
                 .await
-                .unwrap()
-                .computeId;
+                .unwrap();
 
             let pending_tx = manager_contract
                 .submitMetaComputeRequest(meta_id_bytes)
