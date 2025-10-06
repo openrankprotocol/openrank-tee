@@ -1,4 +1,0 @@
-apis:
-  coordinator: "http://34.23.2.14:8080"
-contracts:
-  tee_avs_factory: "0x87A45DB4466ce4f977053Cc976Ec81A83509e0c0"
