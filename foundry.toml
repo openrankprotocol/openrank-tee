@@ -21,8 +21,8 @@ remappings = [
     "@openzeppelin/contracts/=contracts/lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts",
     "@openzeppelin/contracts-upgradeable/=contracts/lib/openzeppelin-contracts-upgradeable/contracts",
     "@openzeppelin-foundry-upgrades/=contracts/lib/openzeppelin-foundry-upgrades/src",
-    "eigenlayer-middleware/=.devkit/compute-tee/contracts/lib/eigenlayer-middleware/",
-    "forge-std/=.devkit/compute-tee/contracts/lib/forge-std/src/",
+    "eigenlayer-middleware/=contracts/lib/eigenlayer-middleware/",
+    "forge-std/=contracts/lib/openzeppelin-foundry-upgrades/lib/forge-std/src",
 ]
 
 [fmt]

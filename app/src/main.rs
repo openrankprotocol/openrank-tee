@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to parse RPC URL '{}': {}", rpc_url, e))?;
     let provider_http = ProviderBuilder::new()
         .wallet(wallet.clone())
-        .on_client(RpcClient::new_http(rpc_url_parsed));
+        .connect_client(RpcClient::new_http(rpc_url_parsed));
 
     let manager_address = Address::from_hex(manager_address)
         .map_err(|e| format!("Failed to parse manager address: {}", e))?;

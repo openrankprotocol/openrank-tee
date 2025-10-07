@@ -35,7 +35,7 @@ pub async fn download_meta<T: DeserializeOwned>(
 }
 
 async fn handle_meta_compute_result<PH: Provider>(
-    contract: &OpenRankManagerInstance<(), PH>,
+    contract: &OpenRankManagerInstance<PH>,
     provider: &PH,
     s3_client: Client,
     bucket_name: String,
@@ -410,7 +410,7 @@ async fn handle_meta_compute_result<PH: Provider>(
 }
 
 pub async fn run<P: Provider>(
-    manager_contract: OpenRankManagerInstance<(), P>,
+    manager_contract: OpenRankManagerInstance<P>,
     provider: P,
     s3_client: Client,
     bucket_name: &str,
@@ -491,7 +491,7 @@ pub async fn run<P: Provider>(
             log,
             &meta_compute_request_map,
             &meta_challanged_jobs_map,
-            challenge_window._0,
+            challenge_window,
         )
         .await
         {
@@ -595,7 +595,7 @@ pub async fn run<P: Provider>(
                 log,
                 &meta_compute_request_map,
                 &meta_challanged_jobs_map,
-                challenge_window._0,
+                challenge_window,
             )
             .await
             {

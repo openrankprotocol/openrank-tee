@@ -62,7 +62,7 @@ pub async fn download_meta<T: DeserializeOwned>(
 }
 
 async fn handle_meta_compute_request<PH: Provider>(
-    contract: &OpenRankManagerInstance<(), PH>,
+    contract: &OpenRankManagerInstance<PH>,
     s3_client: Client,
     bucket_name: String,
     meta_compute_req: MetaComputeRequestEvent,
@@ -366,7 +366,7 @@ async fn handle_meta_compute_request<PH: Provider>(
 }
 
 pub async fn run<PH: Provider>(
-    contract: OpenRankManagerInstance<(), PH>,
+    contract: OpenRankManagerInstance<PH>,
     provider: PH,
     s3_client: Client,
     bucket_name: &str,
