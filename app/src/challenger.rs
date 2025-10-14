@@ -288,6 +288,8 @@ async fn handle_meta_compute_result<PH: Provider>(
     for (i, compute_res) in meta_result.iter().enumerate() {
         let trust_id = job_description[i].trust_id.clone();
         let seed_id = job_description[i].seed_id.clone();
+        let alpha = job_description[i].alpha;
+        let delta = job_description[i].delta;
         let scores_id = compute_res.scores_id.clone();
         let commitment = compute_res.commitment.clone();
 
@@ -338,7 +340,12 @@ async fn handle_meta_compute_result<PH: Provider>(
             )
             .map_err(NodeError::VerificationRunnerError)?;
         let result = runner
-            .verify_job(mock_domain, Hash::from_slice(i.to_be_bytes().as_slice()))
+            .verify_job(
+                mock_domain,
+                Hash::from_slice(i.to_be_bytes().as_slice()),
+                alpha,
+                delta,
+            )
             .map_err(NodeError::VerificationRunnerError)?;
 
         let commitment_bytes = FixedBytes::<32>::from_slice(

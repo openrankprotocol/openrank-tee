@@ -129,18 +129,31 @@ enum Method {
     ComputeRequest {
         trust_folder_path: String,
         seed_folder_path: String,
+        #[arg(long)]
+        alpha: Option<f32>,
+        #[arg(long)]
+        delta: Option<f32>,
     },
     #[command(about = "Compute OpenRank scores locally using trust and seed data")]
     ComputeLocal {
         trust_path: String,
         seed_path: String,
+        #[arg(long)]
         output_path: Option<String>,
+        #[arg(long)]
+        alpha: Option<f32>,
+        #[arg(long)]
+        delta: Option<f32>,
     },
     #[command(about = "Verify computed scores against trust and seed data")]
     VerifyLocal {
         trust_path: String,
         seed_path: String,
         scores_path: String,
+        #[arg(long)]
+        alpha: Option<f32>,
+        #[arg(long)]
+        delta: Option<f32>,
     },
     #[command(about = "Initialize a new OpenRank project configuration")]
     Init { path: String },
@@ -159,16 +172,24 @@ const BUCKET_NAME: &str = "openrank-data-dev";
 
 #[derive(Serialize, Deserialize)]
 struct JobDescription {
-    alpha: f32,
     name: String,
     trust_id: String,
     seed_id: String,
+    alpha: Option<f32>,
+    delta: Option<f32>,
 }
 
 impl JobDescription {
-    pub fn default_with(trust_id: String, name: String, seed_id: String) -> Self {
+    pub fn new(
+        trust_id: String,
+        name: String,
+        seed_id: String,
+        alpha: Option<f32>,
+        delta: Option<f32>,
+    ) -> Self {
         Self {
-            alpha: 0.5,
+            alpha,
+            delta,
             trust_id,
             name,
             seed_id,
@@ -231,7 +252,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
+                .connect_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let compute_id_uint = Uint::<256, 4>::from_str(&compute_id).unwrap();
             let compute_request = manager_contract
@@ -282,7 +303,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
+                .connect_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
             let current_block = provider.get_block_number().await.unwrap();
             let starting_block = (current_block - BLOCK_NUMBER_HISTORY).max(0);
@@ -356,6 +377,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Method::ComputeRequest {
             trust_folder_path,
             seed_folder_path,
+            alpha,
+            delta,
         } => {
             let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
             let wallet = MnemonicBuilder::<English>::default()
@@ -366,7 +389,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .unwrap();
             let provider = ProviderBuilder::new()
                 .wallet(wallet)
-                .on_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
+                .connect_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
             let manager_contract = OpenRankManager::new(manager_address, provider.clone());
 
             let trust_paths = read_dir(trust_folder_path).unwrap();
@@ -393,7 +416,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for (trust_file, trust_id) in trust_map {
                 let seed_id = seed_map.get(&trust_file).unwrap();
                 let job_description =
-                    JobDescription::default_with(trust_id, trust_file, seed_id.clone());
+                    JobDescription::new(trust_id, trust_file, seed_id.clone(), alpha, delta);
                 jds.push(job_description);
             }
 
@@ -425,6 +448,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trust_path,
             seed_path,
             output_path,
+            alpha,
+            delta,
         } => {
             let f = File::open(trust_path).unwrap();
             let trust_entries = parse_trust_entries_from_file(f).unwrap();
@@ -433,9 +458,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let f = File::open(seed_path).unwrap();
             let seed_entries = parse_score_entries_from_file(f).unwrap();
 
-            let scores_vec = compute_local(&trust_entries, &seed_entries).await.unwrap();
+            let mut scores_vec = compute_local(&trust_entries, &seed_entries, alpha, delta)
+                .await
+                .unwrap();
+
+            // Sort scores by value in descending order (highest scores first)
+            scores_vec.sort_by(|a, b| {
+                b.value()
+                    .partial_cmp(a.value())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
 
             if let Some(output_path) = output_path {
+                // Create parent directories if they don't exist
+                if let Some(parent) = std::path::Path::new(&output_path).parent() {
+                    create_dir_all(parent).await.unwrap();
+                }
                 let scores_file = File::create(output_path).unwrap();
                 let mut wtr = csv::Writer::from_writer(scores_file);
                 wtr.write_record(&["i", "v"]).unwrap();
@@ -459,6 +497,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trust_path,
             seed_path,
             scores_path,
+            alpha,
+            delta,
         } => {
             let f = File::open(trust_path).unwrap();
             let trust_entries = parse_trust_entries_from_file(f).unwrap();
@@ -471,7 +511,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let f = File::open(scores_path).unwrap();
             let scores_entries = parse_score_entries_from_file(f).unwrap();
 
-            let res = verify_local(&trust_entries, &seed_entries, &scores_entries)
+            let res = verify_local(&trust_entries, &seed_entries, &scores_entries, alpha, delta)
                 .await
                 .unwrap();
             println!("Verification result: {}", res);

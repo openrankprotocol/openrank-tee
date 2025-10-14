@@ -103,7 +103,13 @@ impl VerificationRunner {
     }
 
     /// Get the list of completed assignments for certain domain
-    pub fn verify_job(&mut self, domain: Domain, compute_id: Hash) -> Result<bool, Error> {
+    pub fn verify_job(
+        &mut self,
+        domain: Domain,
+        compute_id: Hash,
+        alpha: Option<f32>,
+        delta: Option<f32>,
+    ) -> Result<bool, Error> {
         info!("COMPLETED_ASSIGNMENT_SEARCH: {}", domain.to_hash());
         let commitment = self.commitments.get(&compute_id.clone()).unwrap();
         let cp_root = commitment.clone();
@@ -116,7 +122,8 @@ impl VerificationRunner {
             res_lt_root, res_compute_root
         );
         let is_root_equal = cp_root == res_compute_root;
-        let is_converged = self.compute_verification(domain.clone(), compute_id.clone())?;
+        let is_converged =
+            self.compute_verification(domain.clone(), compute_id.clone(), alpha, delta)?;
         info!(
             "COMPLETED_ASSIGNMENT, DOMAIN: {}, is_root_equal: {}, is_converged: {}",
             domain.to_hash(),
@@ -128,7 +135,13 @@ impl VerificationRunner {
     }
 
     /// Get the list of completed assignments for certain domain
-    pub fn verify_scores(&mut self, domain: Domain, compute_id: Hash) -> Result<bool, Error> {
+    pub fn verify_scores(
+        &mut self,
+        domain: Domain,
+        compute_id: Hash,
+        alpha: Option<f32>,
+        delta: Option<f32>,
+    ) -> Result<bool, Error> {
         info!("COMPLETED_ASSIGNMENT_SEARCH: {}", domain.to_hash());
 
         self.create_compute_tree(domain.clone(), compute_id.clone())?;
@@ -138,7 +151,8 @@ impl VerificationRunner {
             "LT_ROOT: {}, COMPUTE_ROOT: {}",
             res_lt_root, res_compute_root
         );
-        let is_converged = self.compute_verification(domain.clone(), compute_id.clone())?;
+        let is_converged =
+            self.compute_verification(domain.clone(), compute_id.clone(), alpha, delta)?;
         info!(
             "COMPLETED_ASSIGNMENT, DOMAIN: {}, is_converged: {}",
             domain.to_hash(),
@@ -177,7 +191,13 @@ impl VerificationRunner {
     }
 
     /// Get the verification result(True or False) of certain assignment, for certain domain
-    fn compute_verification(&mut self, domain: Domain, compute_id: Hash) -> Result<bool, Error> {
+    fn compute_verification(
+        &mut self,
+        domain: Domain,
+        compute_id: Hash,
+        alpha: Option<f32>,
+        delta: Option<f32>,
+    ) -> Result<bool, Error> {
         let compute_scores = self
             .compute_scores
             .get(&domain.to_hash())
@@ -218,6 +238,8 @@ impl VerificationRunner {
             seed.clone(),
             &score_entries,
             *count,
+            alpha,
+            delta,
         ))
     }
 

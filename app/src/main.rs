@@ -12,6 +12,7 @@ use dotenv::dotenv;
 use openrank_app::sol::OpenRankManager;
 use openrank_app::{challenger, computer};
 use openrank_common::logs::setup_tracing;
+use tracing::info;
 
 const BUCKET_NAME: &str = "openrank-data-dev";
 const BLOCK_HISTORY: u64 = 100;
@@ -45,6 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to set mnemonic index: {}", e))?
         .build()
         .map_err(|e| format!("Failed to build wallet: {}", e))?;
+    info!("Wallet address: {}", wallet.address());
 
     let rpc_url_parsed = Url::parse(&rpc_url)
         .map_err(|e| format!("Failed to parse RPC URL '{}': {}", rpc_url, e))?;

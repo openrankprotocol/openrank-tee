@@ -241,7 +241,7 @@ async fn handle_meta_compute_request<PH: Provider>(
             .update_seed_map(mock_domain.clone(), seed_entries.to_vec())
             .map_err(NodeError::ComputeRunnerError)?;
         runner
-            .compute(mock_domain.clone())
+            .compute(mock_domain.clone(), compute_req.alpha, compute_req.delta)
             .map_err(NodeError::ComputeRunnerError)?;
         let scores = runner
             .get_compute_scores(mock_domain.clone())

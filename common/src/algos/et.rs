@@ -8,13 +8,13 @@ use tracing::info;
 use crate::runners::OutboundLocalTrust;
 
 /// The trust weight given to the seed trust vector in the trust matrix calculation.
-const PRE_TRUST_WEIGHT: f32 = 0.5;
+const PRE_TRUST_WEIGHT: f32 = 0.25;
 
 /// The threshold value used for convergence check in the trust matrix calculation.
 ///
 /// If the absolute difference between the current score and the next score is
 /// less than `DELTA`, the score has converged.
-const DELTA: f32 = 0.01;
+const DELTA: f32 = 0.000001;
 
 fn find_reachable_peers(
     lt: &BTreeMap<u64, OutboundLocalTrust>,
@@ -105,8 +105,12 @@ pub fn positive_run(
     mut lt: BTreeMap<u64, OutboundLocalTrust>,
     mut seed: BTreeMap<u64, f32>,
     count: u64,
+    alpha: Option<f32>,
+    delta: Option<f32>,
 ) -> Vec<(u64, f32)> {
     let start = Instant::now();
+    info!("ALPHA: {}", alpha.unwrap_or(PRE_TRUST_WEIGHT));
+    info!("DELTA: {}", delta.unwrap_or(DELTA));
     info!(
         "PRE_PROCESS_START, LT_SIZE: {}, SEED_SIZE: {}",
         lt.len(),
@@ -132,15 +136,15 @@ pub fn positive_run(
     let mut i = 0;
     loop {
         // Calculate the n+1 scores of each node.
-        let n_plus_1_scores = iteration(&lt, &seed, &scores);
+        let n_plus_1_scores = iteration(&lt, &seed, &scores, alpha);
         // Normalise n+1 scores.
         let n_plus_1_scores = normalise_scores(&n_plus_1_scores);
         // Calculate the n+2 scores of each node.
-        let n_plus_2_scores = iteration(&lt, &seed, &n_plus_1_scores);
+        let n_plus_2_scores = iteration(&lt, &seed, &n_plus_1_scores, alpha);
         // Normalise n+2 scores
         let n_plus_2_scores = normalise_scores(&n_plus_2_scores);
         // Check for convergence.
-        let (is_converged, delta) = is_converged(&n_plus_1_scores, &n_plus_2_scores);
+        let (is_converged, delta) = is_converged(&n_plus_1_scores, &n_plus_2_scores, delta);
         info!("ITER: {}, CONVERGED: {}, DELTA: {}", i, is_converged, delta);
         if is_converged {
             // Return previous iteration, since the scores are converged.
@@ -163,7 +167,11 @@ pub fn positive_run(
 
 /// Given the previous scores (`scores`) and the next scores (`next_scores`), checks if the scores have converged.
 /// It returns `true` if the scores have converged and `false` otherwise.
-pub fn is_converged(scores: &BTreeMap<u64, f32>, next_scores: &BTreeMap<u64, f32>) -> (bool, f32) {
+pub fn is_converged(
+    scores: &BTreeMap<u64, f32>,
+    next_scores: &BTreeMap<u64, f32>,
+    delta: Option<f32>,
+) -> (bool, f32) {
     // Iterate over the scores and check if they have converged.
     let total_delta = scores
         .par_iter()
@@ -176,7 +184,7 @@ pub fn is_converged(scores: &BTreeMap<u64, f32>, next_scores: &BTreeMap<u64, f32
             },
         )
         .reduce(|| 0.0, |sum_a, sum_b| sum_a + sum_b);
-    (total_delta <= DELTA, total_delta)
+    (total_delta <= delta.unwrap_or(DELTA), total_delta)
 }
 
 /// It performs a single iteration of the positive run EigenTrust algorithm on the given local trust matrix (`lt`),
@@ -187,6 +195,8 @@ pub fn convergence_check(
     mut seed: BTreeMap<u64, f32>,
     scores: &BTreeMap<u64, f32>,
     count: u64,
+    alpha: Option<f32>,
+    delta: Option<f32>,
 ) -> bool {
     info!(
         "PRE_PROCESS_START, LT_SIZE: {}, SEED_SIZE: {}",
@@ -206,12 +216,12 @@ pub fn convergence_check(
     info!("CONVERGENCE_START");
     let start = Instant::now();
     // Calculate the next scores of each node
-    let next_scores = iteration(&lt, &seed, scores);
+    let next_scores = iteration(&lt, &seed, scores, alpha);
     // Normalize the weighted next scores
     let next_scores = normalise_scores(&next_scores);
 
     // Check if the scores have converged
-    let (is_converged, delta) = is_converged(scores, &next_scores);
+    let (is_converged, delta) = is_converged(scores, &next_scores, delta);
     info!(
         "CONVERGENCE_RESULT: {:?}, DELTA: {}, TIME: {:?}",
         is_converged,
@@ -225,6 +235,7 @@ fn iteration(
     lt: &BTreeMap<u64, OutboundLocalTrust>,
     seed: &BTreeMap<u64, f32>,
     scores: &BTreeMap<u64, f32>,
+    alpha: Option<f32>,
 ) -> BTreeMap<u64, f32> {
     // Step 1-3: Compute raw contributions per node
     let mut next_scores = lt
@@ -250,9 +261,10 @@ fn iteration(
         );
 
     // Step 4: Apply pre-trust weighted normalization
+    let alpha = alpha.unwrap_or(PRE_TRUST_WEIGHT);
     for (i, v) in &mut next_scores {
         let pre_trust = seed.get(i).unwrap_or(&0.0);
-        *v = PRE_TRUST_WEIGHT * pre_trust + *v * (1.0 - PRE_TRUST_WEIGHT);
+        *v = alpha * pre_trust + *v * (1.0 - alpha);
     }
 
     next_scores

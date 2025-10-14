@@ -18,9 +18,11 @@ use std::io::Write;
 /// Common job description used across computer, challenger, and rxp modules
 #[derive(Serialize, Deserialize, Clone)]
 pub struct JobDescription {
-    pub alpha: f32,
+    pub name: String,
     pub trust_id: String,
     pub seed_id: String,
+    pub alpha: Option<f32>,
+    pub delta: Option<f32>,
 }
 
 /// Common job result used across computer, challenger, and rxp modules

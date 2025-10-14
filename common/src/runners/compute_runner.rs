@@ -79,7 +79,12 @@ impl ComputeRunner {
     }
 
     /// Compute the EigenTrust scores for certain domain.
-    pub fn compute(&mut self, domain: Domain) -> Result<(), Error> {
+    pub fn compute(
+        &mut self,
+        domain: Domain,
+        alpha: Option<f32>,
+        delta: Option<f32>,
+    ) -> Result<(), Error> {
         info!("COMPUTE_RUN: {}", domain.to_hash());
         let lt = self
             .base
@@ -96,7 +101,7 @@ impl ComputeRunner {
             .count
             .get(&domain.to_hash())
             .ok_or::<Error>(BaseError::CountNotFound(domain.to_hash()).into())?;
-        let res = positive_run(lt.clone(), seed.clone(), *count);
+        let res = positive_run(lt.clone(), seed.clone(), *count, alpha, delta);
         self.compute_results.insert(domain.to_hash(), res);
         Ok(())
     }
