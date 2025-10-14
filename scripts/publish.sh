@@ -1,5 +1,4 @@
-docker build . -f app/Dockerfile -t lazovicff/openrank-computer
+docker build . -f app/Dockerfile -t lazovicff/openrank-computer --platform=linux/amd64
 docker push lazovicff/openrank-computer
 
-devkit avs build --context=testnet
-devkit avs release publish --context=testnet --registry=docker.io/lazovicff/openrank-computer
+eigenx app upgrade
