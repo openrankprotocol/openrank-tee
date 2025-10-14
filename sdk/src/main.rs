@@ -139,7 +139,7 @@ enum Method {
         trust_path: String,
         seed_path: String,
         #[arg(long)]
-        output_path: Option<String>,
+        out_dir: Option<String>,
         #[arg(long)]
         alpha: Option<f32>,
         #[arg(long)]
@@ -447,7 +447,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Method::ComputeLocal {
             trust_path,
             seed_path,
-            output_path,
+            out_dir,
             alpha,
             delta,
         } => {
@@ -469,7 +469,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            if let Some(output_path) = output_path {
+            if let Some(output_path) = out_dir {
                 // Create parent directories if they don't exist
                 if let Some(parent) = std::path::Path::new(&output_path).parent() {
                     create_dir_all(parent).await.unwrap();
