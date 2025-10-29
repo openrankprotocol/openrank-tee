@@ -11,17 +11,15 @@ use aws_sdk_s3::Client;
 use openrank_common::{JobDescription, JobResult};
 
 use crate::{
-    create_csv_and_hash_from_scores, download_json_metadata_from_s3, download_seed_data_to_file,
+    create_csv_and_hash_from_scores, download_meta, download_seed_data_to_file,
     download_trust_data_to_file, parse_score_entries_from_file, parse_trust_entries_from_file,
-    upload_bytes_to_s3, upload_file_to_s3_streaming,
+    upload_file_to_s3_streaming, upload_meta,
 };
 use openrank_common::merkle::fixed::DenseMerkleTree;
 use openrank_common::merkle::Hash;
 use openrank_common::runner::{self, ComputeRunner};
 
-use serde::de::DeserializeOwned;
-use serde::Serialize;
-use sha3::{Digest, Keccak256};
+use sha3::Keccak256;
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Write;
@@ -29,36 +27,6 @@ use std::io::Write;
 use std::time::{Duration, Instant};
 use tokio::fs::create_dir_all;
 use tracing::{debug, error, info};
-
-pub async fn upload_meta<T: Serialize>(
-    client: &Client,
-    bucket_name: &str,
-    meta: T,
-) -> Result<String, NodeError> {
-    let mut bytes = serde_json::to_vec(&meta).map_err(NodeError::SerdeError)?;
-
-    let mut hasher = Keccak256::new();
-    hasher
-        .write_all(&mut bytes)
-        .map_err(|e| NodeError::FileError(format!("Failed to write to hasher: {}", e)))?;
-    let hash = hasher.finalize().to_vec();
-    upload_bytes_to_s3(
-        client,
-        bucket_name,
-        &format!("meta/{}", hex::encode(hash.clone())),
-        &bytes,
-    )
-    .await?;
-    Ok(hex::encode(hash))
-}
-
-pub async fn download_meta<T: DeserializeOwned>(
-    client: &Client,
-    bucket_name: &str,
-    meta_id: String,
-) -> Result<T, NodeError> {
-    download_json_metadata_from_s3(client, bucket_name, &meta_id).await
-}
 
 async fn handle_meta_compute_request<PH: Provider>(
     contract: &OpenRankManagerInstance<PH>,

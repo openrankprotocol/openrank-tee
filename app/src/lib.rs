@@ -3,10 +3,43 @@ pub mod error;
 pub mod sol;
 
 pub use crate::error::Error;
+use alloy::hex;
 use aws_sdk_s3::Client as S3Client;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
+use sha3::{Digest, Keccak256};
 use std::fs::File;
 use std::io::Write;
+
+pub async fn upload_meta<T: Serialize>(
+    client: &S3Client,
+    bucket_name: &str,
+    meta: T,
+) -> Result<String, Error> {
+    let mut bytes = serde_json::to_vec(&meta).map_err(Error::SerdeError)?;
+
+    let mut hasher = Keccak256::new();
+    hasher
+        .write_all(&mut bytes)
+        .map_err(|e| Error::FileError(format!("Failed to write to hasher: {}", e)))?;
+    let hash = hasher.finalize().to_vec();
+    upload_bytes_to_s3(
+        client,
+        bucket_name,
+        &format!("meta/{}", hex::encode(hash.clone())),
+        &bytes,
+    )
+    .await?;
+    Ok(hex::encode(hash))
+}
+
+pub async fn download_meta<T: DeserializeOwned>(
+    client: &S3Client,
+    bucket_name: &str,
+    meta_id: String,
+) -> Result<T, Error> {
+    download_json_metadata_from_s3(client, bucket_name, &meta_id).await
+}
 
 /// Creates CSV data from score entries and returns both CSV bytes and its Keccak256 hash.
 pub fn create_csv_and_hash_from_scores<I>(scores: I) -> Result<(Vec<u8>, Vec<u8>), Error>
