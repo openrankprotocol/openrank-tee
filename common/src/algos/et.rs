@@ -5,7 +5,7 @@ use std::{
 };
 use tracing::info;
 
-use crate::runners::OutboundLocalTrust;
+use crate::runner::OutboundLocalTrust;
 
 /// The trust weight given to the seed trust vector in the trust matrix calculation.
 const PRE_TRUST_WEIGHT: f32 = 0.25;
@@ -101,7 +101,7 @@ fn normalise_scores(scores: &BTreeMap<u64, f32>) -> BTreeMap<u64, f32> {
 /// Performs the positive EigenTrust algorithm on the given local trust matrix (`lt`) and seed trust values (`seed`).
 /// The algorithm iteratively updates the scores of each node until convergence.
 /// It returns a vector of tuples containing the node ID and the final score.
-pub fn positive_run(
+pub fn eigen_trust_run(
     mut lt: BTreeMap<u64, OutboundLocalTrust>,
     mut seed: BTreeMap<u64, f32>,
     count: u64,

@@ -2,13 +2,8 @@ use crate::BUCKET_NAME;
 use alloy::hex::{self};
 use aws_sdk_s3::{primitives::ByteStream, Client, Error as AwsError};
 use openrank_common::{
-    merkle::Hash,
-    runners::{
-        compute_runner::{self, ComputeRunner},
-        verification_runner::{self, VerificationRunner},
-    },
-    tx::trust::{ScoreEntry, TrustEntry},
-    Domain,
+    runner::{self, ComputeRunner},
+    ScoreEntry, TrustEntry,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use sha3::{Digest, Keccak256};
@@ -231,34 +226,13 @@ pub async fn compute_local(
     seed_entries: &[ScoreEntry],
     alpha: Option<f32>,
     delta: Option<f32>,
-) -> Result<Vec<ScoreEntry>, compute_runner::Error> {
-    let mock_domain = Domain::default();
-    let mut runner = ComputeRunner::new(&[mock_domain.clone()]);
-    runner.update_trust(mock_domain.clone(), trust_entries.to_vec())?;
-    runner.update_seed(mock_domain.clone(), seed_entries.to_vec())?;
-    runner.compute(mock_domain.clone(), alpha, delta)?;
-    let scores = runner.get_compute_scores(mock_domain.clone())?;
+) -> Result<Vec<ScoreEntry>, runner::Error> {
+    let mut runner = ComputeRunner::new();
+    runner.update_trust_map(trust_entries.to_vec())?;
+    runner.update_seed_map(seed_entries.to_vec())?;
+    runner.compute_et(alpha, delta)?;
+    let scores = runner.get_compute_scores()?;
     Ok(scores)
-}
-
-pub async fn verify_local(
-    trust_entries: &[TrustEntry],
-    seed_entries: &[ScoreEntry],
-    scores_entries: &[ScoreEntry],
-    alpha: Option<f32>,
-    delta: Option<f32>,
-) -> Result<bool, verification_runner::Error> {
-    let mock_domain = Domain::default();
-    let mut runner = VerificationRunner::new(&[mock_domain.clone()]);
-    runner.update_trust_map(mock_domain.clone(), trust_entries.to_vec())?;
-    runner.update_seed_map(mock_domain.clone(), seed_entries.to_vec())?;
-    runner.update_scores(
-        mock_domain.clone(),
-        Hash::default(),
-        scores_entries.to_vec(),
-    )?;
-    let result = runner.verify_scores(mock_domain, Hash::default(), alpha, delta)?;
-    Ok(result)
 }
 
 pub fn save_json_to_file<T: Serialize>(data: T, file: &Path) -> Result<(), std::io::Error> {

@@ -1,4 +1,3 @@
-pub mod challenger;
 pub mod computer;
 pub mod error;
 pub mod sol;
@@ -15,78 +14,6 @@ use aws_sdk_s3::Client as S3Client;
 use std::fs::File;
 use std::io::Write;
 
-/// Common job description used across computer, challenger, and rxp modules
-#[derive(Serialize, Deserialize, Clone)]
-pub struct JobDescription {
-    pub name: String,
-    pub trust_id: String,
-    pub seed_id: String,
-    pub alpha: Option<f32>,
-    pub delta: Option<f32>,
-}
-
-/// Common job result used across computer, challenger, and rxp modules
-#[derive(Serialize, Deserialize, Clone)]
-pub struct JobResult {
-    pub scores_id: String,
-    pub commitment: String,
-}
-
-impl JobResult {
-    pub fn new(scores_id: String, commitment: String) -> Self {
-        Self {
-            scores_id,
-            commitment,
-        }
-    }
-}
-
-/// EigenDA job description used in challenger and rxp modules
-#[derive(Serialize, Deserialize)]
-pub struct EigenDaJobDescription {
-    pub neighbour_commitments: Vec<String>,
-    pub trust_data: Vec<u8>,
-    pub seed_data: Vec<u8>,
-    pub scores_data: Vec<u8>,
-}
-
-impl EigenDaJobDescription {
-    pub fn new(
-        neighbour_commitments: Vec<String>,
-        trust_data: Vec<u8>,
-        seed_data: Vec<u8>,
-        scores_data: Vec<u8>,
-    ) -> Self {
-        Self {
-            neighbour_commitments,
-            trust_data,
-            seed_data,
-            scores_data,
-        }
-    }
-}
-
-/// OpenRank execution input used in rxp module
-#[derive(Debug, Default)]
-pub struct OpenRankExeInput {
-    pub compute_id: Uint<256, 4>,
-    pub job_id: u32,
-}
-
-impl OpenRankExeInput {
-    pub fn new(compute_id: Uint<256, 4>, job_id: u32) -> Self {
-        Self { compute_id, job_id }
-    }
-}
-
-/// OpenRank execution result used in rxp module
-#[derive(Debug, Default, RlpEncodable)]
-pub struct OpenRankExeResult {
-    pub result: bool,
-    pub meta_commitment: FixedBytes<32>,
-    pub sub_job_commitment: FixedBytes<32>,
-}
-
 /// Creates CSV data from score entries and computes Keccak256 hash
 ///
 /// This function takes a collection of score entries, converts them to CSV format
@@ -97,22 +24,9 @@ pub struct OpenRankExeResult {
 ///
 /// # Returns
 /// * `Result<(Vec<u8>, Vec<u8>), Error>` - Tuple of (CSV bytes, hash bytes) or an error
-///
-/// # Examples
-/// ```
-/// use openrank_common::tx::trust::ScoreEntry;
-/// use openrank_node::create_csv_and_hash_from_scores;
-///
-/// let scores = vec![
-///     ScoreEntry::new("alice".to_string(), 0.95),
-///     ScoreEntry::new("bob".to_string(), 0.87),
-/// ];
-/// let (csv_data, hash) = create_csv_and_hash_from_scores(scores).unwrap();
-/// let hash_hex = alloy::hex::encode(hash);
-/// ```
 pub fn create_csv_and_hash_from_scores<I>(scores: I) -> Result<(Vec<u8>, Vec<u8>), Error>
 where
-    I: IntoIterator<Item = openrank_common::tx::trust::ScoreEntry>,
+    I: IntoIterator<Item = openrank_common::ScoreEntry>,
 {
     use sha3::{Digest, Keccak256};
 
@@ -190,7 +104,7 @@ where
 /// ```
 pub fn create_csv_file_and_hash_from_scores<I>(scores: I, file_path: &str) -> Result<Vec<u8>, Error>
 where
-    I: IntoIterator<Item = openrank_common::tx::trust::ScoreEntry>,
+    I: IntoIterator<Item = openrank_common::ScoreEntry>,
 {
     use sha3::{Digest, Keccak256};
     use std::fs::File;
@@ -395,7 +309,7 @@ pub async fn download_trust_entries_from_s3(
     s3_client: &S3Client,
     bucket_name: &str,
     trust_id: &str,
-) -> Result<Vec<openrank_common::tx::trust::TrustEntry>, Error> {
+) -> Result<Vec<openrank_common::TrustEntry>, Error> {
     let object_key = format!("trust/{}", trust_id);
     download_and_parse_csv_from_s3(s3_client, bucket_name, &object_key).await
 }
@@ -417,7 +331,7 @@ pub async fn download_score_entries_from_s3(
     bucket_name: &str,
     object_type: &str, // "seed" or "scores"
     score_id: &str,
-) -> Result<Vec<openrank_common::tx::trust::ScoreEntry>, Error> {
+) -> Result<Vec<openrank_common::ScoreEntry>, Error> {
     let object_key = format!("{}/{}", object_type, score_id);
     download_and_parse_csv_from_s3(s3_client, bucket_name, &object_key).await
 }
@@ -1042,9 +956,7 @@ where
 ///
 /// This is a convenience wrapper around `parse_csv_bytes` specifically for TrustEntry.
 /// Expects CSV format: from,to,value
-pub fn parse_trust_entries(
-    csv_bytes: &[u8],
-) -> Result<Vec<openrank_common::tx::trust::TrustEntry>, Error> {
+pub fn parse_trust_entries(csv_bytes: &[u8]) -> Result<Vec<openrank_common::TrustEntry>, Error> {
     parse_csv_bytes(csv_bytes)
 }
 
@@ -1052,9 +964,7 @@ pub fn parse_trust_entries(
 ///
 /// This is a convenience wrapper around `parse_csv_bytes` specifically for ScoreEntry.
 /// Expects CSV format: id,value
-pub fn parse_score_entries(
-    csv_bytes: &[u8],
-) -> Result<Vec<openrank_common::tx::trust::ScoreEntry>, Error> {
+pub fn parse_score_entries(csv_bytes: &[u8]) -> Result<Vec<openrank_common::ScoreEntry>, Error> {
     parse_csv_bytes(csv_bytes)
 }
 
@@ -1064,11 +974,11 @@ pub fn parse_score_entries(
 /// and then creating TrustEntry objects. It handles the conversion internally.
 pub fn parse_trust_entries_from_tuples(
     csv_bytes: &[u8],
-) -> Result<Vec<openrank_common::tx::trust::TrustEntry>, Error> {
+) -> Result<Vec<openrank_common::TrustEntry>, Error> {
     let tuples: Vec<(String, String, f32)> = parse_csv_bytes(csv_bytes)?;
     let entries = tuples
         .into_iter()
-        .map(|(from, to, value)| openrank_common::tx::trust::TrustEntry::new(from, to, value))
+        .map(|(from, to, value)| openrank_common::TrustEntry::new(from, to, value))
         .collect();
     Ok(entries)
 }
@@ -1079,11 +989,11 @@ pub fn parse_trust_entries_from_tuples(
 /// and then creating ScoreEntry objects. It handles the conversion internally.
 pub fn parse_score_entries_from_tuples(
     csv_bytes: &[u8],
-) -> Result<Vec<openrank_common::tx::trust::ScoreEntry>, Error> {
+) -> Result<Vec<openrank_common::ScoreEntry>, Error> {
     let tuples: Vec<(String, f32)> = parse_csv_bytes(csv_bytes)?;
     let entries = tuples
         .into_iter()
-        .map(|(id, value)| openrank_common::tx::trust::ScoreEntry::new(id, value))
+        .map(|(id, value)| openrank_common::ScoreEntry::new(id, value))
         .collect();
     Ok(entries)
 }
@@ -1126,7 +1036,7 @@ pub fn parse_score_entries_from_tuples(
 /// Useful for reading trust data from files on disk.
 pub fn parse_trust_entries_from_file(
     file: std::fs::File,
-) -> Result<Vec<openrank_common::tx::trust::TrustEntry>, Error> {
+) -> Result<Vec<openrank_common::TrustEntry>, Error> {
     let mut reader = csv::Reader::from_reader(file);
     let mut entries = Vec::new();
 
@@ -1134,7 +1044,7 @@ pub fn parse_trust_entries_from_file(
         let record: csv::StringRecord = result.map_err(Error::CsvError)?;
         let (from, to, value): (String, String, f32) =
             record.deserialize(None).map_err(Error::CsvError)?;
-        let trust_entry = openrank_common::tx::trust::TrustEntry::new(from, to, value);
+        let trust_entry = openrank_common::TrustEntry::new(from, to, value);
         entries.push(trust_entry);
     }
 
@@ -1147,14 +1057,14 @@ pub fn parse_trust_entries_from_file(
 /// Useful for reading seed or score data from files on disk.
 pub fn parse_score_entries_from_file(
     file: std::fs::File,
-) -> Result<Vec<openrank_common::tx::trust::ScoreEntry>, Error> {
+) -> Result<Vec<openrank_common::ScoreEntry>, Error> {
     let mut reader = csv::Reader::from_reader(file);
     let mut entries = Vec::new();
 
     for result in reader.records() {
         let record: csv::StringRecord = result.map_err(Error::CsvError)?;
         let (id, value): (String, f32) = record.deserialize(None).map_err(Error::CsvError)?;
-        let score_entry = openrank_common::tx::trust::ScoreEntry::new(id, value);
+        let score_entry = openrank_common::ScoreEntry::new(id, value);
         entries.push(score_entry);
     }
 
@@ -1209,231 +1119,4 @@ pub fn validate_score_csv_file(file: std::fs::File) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-/// # Migration Guide
-///
-/// The functions in this module are designed to replace the repetitive CSV parsing
-/// functionality found in rxp.rs and other similar use-cases throughout the codebase.
-pub struct CsvParsingExamples;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use openrank_common::tx::trust::{ScoreEntry, TrustEntry};
-
-    #[test]
-    fn test_parse_csv_tuples() {
-        let csv_data = b"alice,bob,0.8\nbob,charlie,0.9";
-        let tuples: Vec<(String, String, f32)> = parse_csv_tuples(csv_data).unwrap();
-
-        // CSV reader treats first line as header by default, so we only get 1 record
-        assert_eq!(tuples.len(), 1);
-        assert_eq!(tuples[0], ("bob".to_string(), "charlie".to_string(), 0.9));
-    }
-
-    #[test]
-    fn test_parse_csv_with_headers() {
-        let csv_data = b"from,to,value\nalice,bob,0.8\nbob,charlie,0.9";
-        let tuples: Vec<(String, String, f32)> = parse_csv_tuples(csv_data).unwrap();
-
-        assert_eq!(tuples.len(), 2);
-        assert_eq!(tuples[0], ("alice".to_string(), "bob".to_string(), 0.8));
-        assert_eq!(tuples[1], ("bob".to_string(), "charlie".to_string(), 0.9));
-    }
-
-    #[test]
-    fn test_parse_score_tuples() {
-        let csv_data = b"id,value\nalice,0.95\nbob,0.87";
-        let tuples: Vec<(String, f32)> = parse_csv_tuples(csv_data).unwrap();
-
-        assert_eq!(tuples.len(), 2);
-        assert_eq!(tuples[0], ("alice".to_string(), 0.95));
-        assert_eq!(tuples[1], ("bob".to_string(), 0.87));
-    }
-
-    #[test]
-    fn test_empty_csv() {
-        let csv_data = b"";
-        let tuples: Vec<(String, String, f32)> = parse_csv_tuples(csv_data).unwrap();
-        assert_eq!(tuples.len(), 0);
-    }
-
-    #[test]
-    fn test_headers_only() {
-        let csv_data = b"from,to,value";
-        let tuples: Vec<(String, String, f32)> = parse_csv_tuples(csv_data).unwrap();
-        assert_eq!(tuples.len(), 0);
-    }
-
-    #[test]
-    fn test_malformed_csv() {
-        let csv_data = b"alice,bob\nbob,charlie,0.9,extra";
-        let result: Result<Vec<(String, String, f32)>, _> = parse_csv_tuples(csv_data);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_convert_tuples_to_trust_entries() {
-        let csv_data = b"from,to,value\nalice,bob,0.8\nbob,charlie,0.9";
-        let tuples: Vec<(String, String, f32)> = parse_csv_tuples(csv_data).unwrap();
-
-        let trust_entries: Vec<TrustEntry> = tuples
-            .into_iter()
-            .map(|(from, to, value)| TrustEntry::new(from, to, value))
-            .collect();
-
-        assert_eq!(trust_entries.len(), 2);
-        assert_eq!(*trust_entries[0].from(), "alice");
-        assert_eq!(*trust_entries[0].to(), "bob");
-        assert_eq!(*trust_entries[0].value(), 0.8);
-    }
-
-    #[test]
-    fn test_parse_csv_no_headers() {
-        let csv_data = b"alice,bob,0.8\nbob,charlie,0.9";
-        let tuples: Vec<(String, String, f32)> = parse_csv_bytes_no_headers(csv_data).unwrap();
-
-        assert_eq!(tuples.len(), 2);
-        assert_eq!(tuples[0], ("alice".to_string(), "bob".to_string(), 0.8));
-        assert_eq!(tuples[1], ("bob".to_string(), "charlie".to_string(), 0.9));
-    }
-
-    #[test]
-    fn test_convert_tuples_to_score_entries() {
-        let csv_data = b"id,value\nalice,0.95\nbob,0.87";
-        let tuples: Vec<(String, f32)> = parse_csv_tuples(csv_data).unwrap();
-
-        let score_entries: Vec<ScoreEntry> = tuples
-            .into_iter()
-            .map(|(id, value)| ScoreEntry::new(id, value))
-            .collect();
-
-        assert_eq!(score_entries.len(), 2);
-        assert_eq!(*score_entries[0].id(), "alice");
-        assert_eq!(*score_entries[0].value(), 0.95);
-    }
-
-    #[test]
-    fn test_parse_trust_entries_from_tuples() {
-        let csv_data = b"from,to,value\nalice,bob,0.8\nbob,charlie,0.9";
-        let trust_entries = parse_trust_entries_from_tuples(csv_data).unwrap();
-
-        assert_eq!(trust_entries.len(), 2);
-        assert_eq!(*trust_entries[0].from(), "alice");
-        assert_eq!(*trust_entries[0].to(), "bob");
-        assert_eq!(*trust_entries[0].value(), 0.8);
-        assert_eq!(*trust_entries[1].from(), "bob");
-        assert_eq!(*trust_entries[1].to(), "charlie");
-        assert_eq!(*trust_entries[1].value(), 0.9);
-    }
-
-    #[test]
-    fn test_parse_score_entries_from_tuples() {
-        let csv_data = b"id,value\nalice,0.95\nbob,0.87";
-        let score_entries = parse_score_entries_from_tuples(csv_data).unwrap();
-
-        assert_eq!(score_entries.len(), 2);
-        assert_eq!(*score_entries[0].id(), "alice");
-        assert_eq!(*score_entries[0].value(), 0.95);
-        assert_eq!(*score_entries[1].id(), "bob");
-        assert_eq!(*score_entries[1].value(), 0.87);
-    }
-
-    #[test]
-    fn test_validate_trust_csv() {
-        let csv_data = b"from,to,value\nalice,bob,0.8\nbob,charlie,0.9";
-        assert!(validate_trust_csv(csv_data).is_ok());
-
-        let invalid_csv = b"from,to\nalice,bob\nbob,charlie";
-        assert!(validate_trust_csv(invalid_csv).is_err());
-    }
-
-    #[test]
-    fn test_validate_score_csv() {
-        let csv_data = b"id,value\nalice,0.95\nbob,0.87";
-        assert!(validate_score_csv(csv_data).is_ok());
-
-        let invalid_csv = b"id\nalice\nbob";
-        assert!(validate_score_csv(invalid_csv).is_err());
-    }
-
-    #[test]
-    fn test_create_csv_and_hash_from_scores() {
-        let scores = vec![
-            ScoreEntry::new("alice".to_string(), 0.95),
-            ScoreEntry::new("bob".to_string(), 0.87),
-        ];
-
-        let result = create_csv_and_hash_from_scores(scores);
-        assert!(result.is_ok());
-
-        let (csv_data, hash) = result.unwrap();
-
-        // Check that CSV data is not empty
-        assert!(!csv_data.is_empty());
-
-        // Check that hash is 32 bytes (Keccak256)
-        assert_eq!(hash.len(), 32);
-
-        // Check that CSV contains expected content
-        let csv_string = String::from_utf8(csv_data).unwrap();
-        assert!(csv_string.contains("i,v"));
-        assert!(csv_string.contains("alice,0.95"));
-        assert!(csv_string.contains("bob,0.87"));
-
-        // Hash should be deterministic
-        let scores2 = vec![
-            ScoreEntry::new("alice".to_string(), 0.95),
-            ScoreEntry::new("bob".to_string(), 0.87),
-        ];
-        let (_, hash2) = create_csv_and_hash_from_scores(scores2).unwrap();
-        assert_eq!(hash, hash2);
-    }
-
-    #[test]
-    fn test_create_csv_file_and_hash_from_scores() {
-        use std::fs;
-        use std::path::Path;
-
-        let scores = vec![
-            ScoreEntry::new("alice".to_string(), 0.95),
-            ScoreEntry::new("bob".to_string(), 0.87),
-        ];
-
-        let file_path = "./test_scores.csv";
-
-        // Clean up any existing test file
-        if Path::new(file_path).exists() {
-            fs::remove_file(file_path).ok();
-        }
-
-        let result = create_csv_file_and_hash_from_scores(scores, file_path);
-        assert!(result.is_ok());
-
-        let hash = result.unwrap();
-
-        // Check that hash is 32 bytes (Keccak256)
-        assert_eq!(hash.len(), 32);
-
-        // Check that file was created and contains expected content
-        assert!(Path::new(file_path).exists());
-        let file_content = fs::read_to_string(file_path).unwrap();
-        assert!(file_content.contains("i,v"));
-        assert!(file_content.contains("alice,0.95"));
-        assert!(file_content.contains("bob,0.87"));
-
-        // Hash should be deterministic - test with same data
-        let scores2 = vec![
-            ScoreEntry::new("alice".to_string(), 0.95),
-            ScoreEntry::new("bob".to_string(), 0.87),
-        ];
-        let file_path2 = "./test_scores2.csv";
-        let hash2 = create_csv_file_and_hash_from_scores(scores2, file_path2).unwrap();
-        assert_eq!(hash, hash2);
-
-        // Clean up test files
-        fs::remove_file(file_path).ok();
-        fs::remove_file(file_path2).ok();
-    }
 }

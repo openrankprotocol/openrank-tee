@@ -5,11 +5,10 @@ use crate::actions::save_json_to_file;
 use crate::sol::OpenRankManager::{MetaComputeRequestEvent, MetaComputeResultEvent};
 use actions::{
     compute_local, download_meta, download_scores, upload_meta, upload_seed, upload_trust,
-    verify_local,
 };
 use alloy::eips::BlockNumberOrTag;
 use alloy::hex::{FromHex, ToHexExt};
-use alloy::primitives::{Address, FixedBytes, TxHash, Uint};
+use alloy::primitives::{Address, FixedBytes, Uint};
 use alloy::providers::{Provider, ProviderBuilder};
 use alloy::rpc::client::RpcClient;
 use alloy::rpc::types::Log;
@@ -25,8 +24,10 @@ use csv::StringRecord;
 use dotenv::dotenv;
 use futures_util::StreamExt;
 use openrank_common::logs::setup_tracing;
-use openrank_common::tx::trust::{ScoreEntry, TrustEntry};
-use serde::{Deserialize, Serialize};
+use openrank_common::{
+    parse_score_entries_from_file, parse_trust_entries_from_file, JobDescription, JobMetadata,
+    JobResult, ScoreEntry, TrustEntry,
+};
 use sol::OpenRankManager;
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
@@ -38,77 +39,6 @@ use tokio::fs::{self, create_dir_all};
 use tracing::info;
 
 const BLOCK_NUMBER_HISTORY: u64 = 1000;
-
-/// Helper function to parse trust entries from a CSV file
-fn parse_trust_entries_from_file(file: File) -> Result<Vec<TrustEntry>, csv::Error> {
-    let mut reader = csv::Reader::from_reader(file);
-    let mut entries = Vec::new();
-
-    for result in reader.records() {
-        let record: StringRecord = result?;
-        let (from, to, value): (String, String, f32) = record.deserialize(None)?;
-        let trust_entry = TrustEntry::new(from, to, value);
-        entries.push(trust_entry);
-    }
-
-    Ok(entries)
-}
-
-/// Helper function to parse score entries from a CSV file
-fn parse_score_entries_from_file(file: File) -> Result<Vec<ScoreEntry>, csv::Error> {
-    let mut reader = csv::Reader::from_reader(file);
-    let mut entries = Vec::new();
-
-    for result in reader.records() {
-        let record: StringRecord = result?;
-        let (id, value): (String, f32) = record.deserialize(None)?;
-        let score_entry = ScoreEntry::new(id, value);
-        entries.push(score_entry);
-    }
-
-    Ok(entries)
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct JobMetadata {
-    request_tx_hash: Option<TxHash>,
-    results_tx_hash: Option<TxHash>,
-    challenge_tx_hash: Option<TxHash>,
-}
-
-impl JobMetadata {
-    pub fn new() -> Self {
-        Self {
-            request_tx_hash: None,
-            results_tx_hash: None,
-            challenge_tx_hash: None,
-        }
-    }
-
-    pub fn set_request_tx_hash(&mut self, request_tx_hash: TxHash) {
-        self.request_tx_hash = Some(request_tx_hash);
-    }
-
-    pub fn set_results_tx_hash(&mut self, results_tx_hash: TxHash) {
-        self.results_tx_hash = Some(results_tx_hash);
-    }
-
-    pub fn set_challenge_tx_hash(&mut self, challenge_tx_hash: TxHash) {
-        self.challenge_tx_hash = Some(challenge_tx_hash);
-    }
-
-    pub fn has_request_tx(&self) -> bool {
-        self.request_tx_hash.is_some()
-    }
-
-    pub fn has_results_tx(&self) -> bool {
-        self.results_tx_hash.is_some()
-    }
-
-    pub fn has_challenge_tx(&self) -> bool {
-        self.challenge_tx_hash.is_some()
-    }
-}
 
 #[derive(Debug, Clone, Subcommand)]
 /// The method to call.
@@ -145,16 +75,6 @@ enum Method {
         #[arg(long)]
         delta: Option<f32>,
     },
-    #[command(about = "Verify computed scores against trust and seed data")]
-    VerifyLocal {
-        trust_path: String,
-        seed_path: String,
-        scores_path: String,
-        #[arg(long)]
-        alpha: Option<f32>,
-        #[arg(long)]
-        delta: Option<f32>,
-    },
     #[command(about = "Initialize a new OpenRank project configuration")]
     Init { path: String },
     #[command(about = "Display the current OpenRank manager contract address")]
@@ -169,39 +89,6 @@ struct Args {
 }
 
 const BUCKET_NAME: &str = "openrank-data-dev";
-
-#[derive(Serialize, Deserialize)]
-struct JobDescription {
-    name: String,
-    trust_id: String,
-    seed_id: String,
-    alpha: Option<f32>,
-    delta: Option<f32>,
-}
-
-impl JobDescription {
-    pub fn new(
-        trust_id: String,
-        name: String,
-        seed_id: String,
-        alpha: Option<f32>,
-        delta: Option<f32>,
-    ) -> Self {
-        Self {
-            alpha,
-            delta,
-            trust_id,
-            name,
-            seed_id,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct JobResult {
-    scores_id: String,
-    commitment: String,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -492,29 +379,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let res = wtr.into_inner().unwrap();
                 println!("{:?}", String::from_utf8(res));
             }
-        }
-        Method::VerifyLocal {
-            trust_path,
-            seed_path,
-            scores_path,
-            alpha,
-            delta,
-        } => {
-            let f = File::open(trust_path).unwrap();
-            let trust_entries = parse_trust_entries_from_file(f).unwrap();
-
-            // Read CSV, to get a list of `ScoreEntry`
-            let f = File::open(seed_path).unwrap();
-            let seed_entries = parse_score_entries_from_file(f).unwrap();
-
-            // Read CSV, to get a list of `ScoreEntry`
-            let f = File::open(scores_path).unwrap();
-            let scores_entries = parse_score_entries_from_file(f).unwrap();
-
-            let res = verify_local(&trust_entries, &seed_entries, &scores_entries, alpha, delta)
-                .await
-                .unwrap();
-            println!("Verification result: {}", res);
         }
         Method::Init { path } => {
             // Ensure target directory exists

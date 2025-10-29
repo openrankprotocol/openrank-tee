@@ -15,7 +15,6 @@ thiserror = { workspace = true }
 alloy = { workspace = true, features = ["signer-mnemonic", "provider-ws"] }
 alloy-rlp = { workspace = true }
 alloy-sol-types = { workspace = true }
-clap = { workspace = true, features = ["derive"] }
 aws-sdk-s3 = { workspace = true }
 aws-config = { workspace = true, features = ["behavior-version-latest"] }
 aws-credential-types = { workspace = true }

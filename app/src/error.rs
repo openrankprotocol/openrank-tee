@@ -5,8 +5,7 @@ use alloy::{
 use aws_sdk_s3::{primitives::ByteStreamError, Error as AwsError};
 use csv::Error as CsvError;
 use openrank_common::eigenda::EigenDAError;
-use openrank_common::runners::compute_runner::Error as ComputeRunnerError;
-use openrank_common::runners::verification_runner::Error as VerificationRunnerError;
+use openrank_common::runner::Error as ComputeRunnerError;
 use serde_json::Error as SerdeError;
 
 #[derive(thiserror::Error, Debug)]
@@ -29,8 +28,6 @@ pub enum Error {
     CsvError(CsvError),
     #[error("ComputeRunnerError: {0}")]
     ComputeRunnerError(ComputeRunnerError),
-    #[error("VerificationRunnerError: {0}")]
-    VerificationRunnerError(VerificationRunnerError),
     #[error("Tx Error: {0}")]
     TxError(String),
     #[error("ByteStreamError: {0}")]

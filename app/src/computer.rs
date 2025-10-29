@@ -2,13 +2,13 @@ use crate::error::Error as NodeError;
 use crate::sol::OpenRankManager::{
     MetaComputeRequestEvent, MetaComputeResultEvent, OpenRankManagerInstance,
 };
-use crate::{JobDescription, JobResult};
 use alloy::eips::BlockNumberOrTag;
 use alloy::hex::{self, ToHexExt};
 use alloy::primitives::FixedBytes;
 use alloy::providers::Provider;
 use alloy::rpc::types::Log;
 use aws_sdk_s3::Client;
+use openrank_common::{JobDescription, JobResult};
 
 use crate::{
     create_csv_and_hash_from_scores, download_json_metadata_from_s3, download_seed_data_to_file,
@@ -17,8 +17,7 @@ use crate::{
 };
 use openrank_common::merkle::fixed::DenseMerkleTree;
 use openrank_common::merkle::Hash;
-use openrank_common::runners::compute_runner::{self, ComputeRunner};
-use openrank_common::Domain;
+use openrank_common::runner::{self, ComputeRunner};
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -232,25 +231,24 @@ async fn handle_meta_compute_request<PH: Provider>(
         let seed_entries = parse_score_entries_from_file(seed_file)?;
 
         // Core compute operations
-        let mock_domain = Domain::default();
-        let mut runner = ComputeRunner::new(&[mock_domain.clone()]);
+        let mut runner = ComputeRunner::new();
         runner
-            .update_trust_map(mock_domain.clone(), trust_entries.to_vec())
+            .update_trust_map(trust_entries.to_vec())
             .map_err(NodeError::ComputeRunnerError)?;
         runner
-            .update_seed_map(mock_domain.clone(), seed_entries.to_vec())
+            .update_seed_map(seed_entries.to_vec())
             .map_err(NodeError::ComputeRunnerError)?;
         runner
-            .compute(mock_domain.clone(), compute_req.alpha, compute_req.delta)
+            .compute_et(compute_req.alpha, compute_req.delta)
             .map_err(NodeError::ComputeRunnerError)?;
         let scores = runner
-            .get_compute_scores(mock_domain.clone())
+            .get_compute_scores()
             .map_err(NodeError::ComputeRunnerError)?;
         runner
-            .create_compute_tree(mock_domain.clone())
+            .create_compute_tree()
             .map_err(NodeError::ComputeRunnerError)?;
-        let (_, compute_root) = runner
-            .get_root_hashes(mock_domain.clone())
+        let compute_root = runner
+            .get_root_hash()
             .map_err(NodeError::ComputeRunnerError)?;
 
         // Create CSV file and compute hash
@@ -329,10 +327,10 @@ async fn handle_meta_compute_request<PH: Provider>(
     info!("STAGE 3 complete: All scores files uploaded to S3 in parallel");
 
     let commitment_tree = DenseMerkleTree::<Keccak256>::new(commitments)
-        .map_err(|e| NodeError::ComputeRunnerError(compute_runner::Error::Merkle(e)))?;
+        .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
     let meta_commitment = commitment_tree
         .root()
-        .map_err(|e| NodeError::ComputeRunnerError(compute_runner::Error::Merkle(e)))?;
+        .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
 
     let meta_id = upload_meta(&s3_client, &bucket_name, job_results).await?;
 

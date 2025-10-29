@@ -18,6 +18,7 @@ serde_json = { workspace = true }
 sha3 = { workspace = true }
 k256 = { workspace = true }
 thiserror = { workspace = true }
+csv = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter", "time"] }
