@@ -4,7 +4,8 @@ mod sol;
 use crate::actions::save_json_to_file;
 use crate::sol::OpenRankManager::{MetaComputeRequestEvent, MetaComputeResultEvent};
 use actions::{
-    compute_local, download_meta, download_scores, upload_meta, upload_seed, upload_trust,
+    compute_local, compute_local_sr, download_meta, download_scores, upload_meta, upload_seed,
+    upload_trust,
 };
 use alloy::eips::BlockNumberOrTag;
 use alloy::hex::{FromHex, ToHexExt};
@@ -20,13 +21,12 @@ use aws_credential_types::Credentials;
 use aws_sdk_s3::config::SharedCredentialsProvider;
 use aws_sdk_s3::Client;
 use clap::{Parser, Subcommand};
-use csv::StringRecord;
 use dotenv::dotenv;
 use futures_util::StreamExt;
 use openrank_common::logs::setup_tracing;
 use openrank_common::{
     parse_score_entries_from_file, parse_trust_entries_from_file, JobDescription, JobMetadata,
-    JobResult, ScoreEntry, TrustEntry,
+    JobResult,
 };
 use sol::OpenRankManager;
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ enum Method {
         out_dir: Option<String>,
     },
     #[command(about = "Submit a compute request with trust and seed data")]
-    ComputeRequest {
+    ComputeRequestEt {
         trust_folder_path: String,
         seed_folder_path: String,
         #[arg(long)]
@@ -64,8 +64,17 @@ enum Method {
         #[arg(long)]
         delta: Option<f32>,
     },
+    #[command(about = "Submit a SybilRank compute request with trust and seed data")]
+    ComputeRequestSr {
+        trust_folder_path: String,
+        seed_folder_path: String,
+        #[arg(long)]
+        walk_length: Option<u32>,
+        #[arg(long)]
+        num_walks: Option<u32>,
+    },
     #[command(about = "Compute OpenRank scores locally using trust and seed data")]
-    ComputeLocal {
+    ComputeLocalEt {
         trust_path: String,
         seed_path: String,
         #[arg(long)]
@@ -74,6 +83,17 @@ enum Method {
         alpha: Option<f32>,
         #[arg(long)]
         delta: Option<f32>,
+    },
+    #[command(about = "Compute SybilRank scores locally using trust and seed data")]
+    ComputeLocalSr {
+        trust_path: String,
+        seed_path: String,
+        #[arg(long)]
+        out_dir: Option<String>,
+        #[arg(long)]
+        walk_length: Option<u32>,
+        #[arg(long)]
+        num_walks: Option<u32>,
     },
     #[command(about = "Initialize a new OpenRank project configuration")]
     Init { path: String },
@@ -261,7 +281,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 print!("{}", serde_json::to_string(&job_metadata).unwrap())
             }
         }
-        Method::ComputeRequest {
+        Method::ComputeRequestEt {
             trust_folder_path,
             seed_folder_path,
             alpha,
@@ -302,8 +322,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut jds = Vec::new();
             for (trust_file, trust_id) in trust_map {
                 let seed_id = seed_map.get(&trust_file).unwrap();
+                let mut params = HashMap::new();
+                if let Some(a) = alpha {
+                    params.insert("alpha".to_string(), a.to_string());
+                }
+                if let Some(d) = delta {
+                    params.insert("delta".to_string(), d.to_string());
+                }
                 let job_description =
-                    JobDescription::new(trust_id, trust_file, seed_id.clone(), alpha, delta);
+                    JobDescription::new(trust_id, trust_file, seed_id.clone(), 1, params);
                 jds.push(job_description);
             }
 
@@ -331,7 +358,84 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("{}", compute_id);
         }
-        Method::ComputeLocal {
+        Method::ComputeRequestSr {
+            trust_folder_path,
+            seed_folder_path,
+            walk_length,
+            num_walks,
+        } => {
+            let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .index(0)
+                .unwrap()
+                .build()
+                .unwrap();
+            let provider = ProviderBuilder::new()
+                .wallet(wallet)
+                .connect_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
+            let manager_contract = OpenRankManager::new(manager_address, provider);
+
+            let trust_paths = read_dir(trust_folder_path).unwrap();
+            let mut trust_map = HashMap::new();
+            for path in trust_paths {
+                let path = path.unwrap().path();
+                let file_name = path.file_name().unwrap().to_str().unwrap();
+                let display = path.display().to_string();
+                let res = upload_trust(client.clone(), display).await.unwrap();
+                trust_map.insert(file_name.to_string(), res);
+            }
+
+            let seed_paths = read_dir(seed_folder_path).unwrap();
+            let mut seed_map = HashMap::new();
+            for path in seed_paths {
+                let path = path.unwrap().path();
+                let file_name = path.file_name().unwrap().to_str().unwrap();
+                let display = path.display().to_string();
+                let res = upload_seed(client.clone(), display).await.unwrap();
+                seed_map.insert(file_name.to_string(), res);
+            }
+
+            let mut jds = Vec::new();
+            for (trust_file, trust_id) in trust_map {
+                let seed_id = seed_map.get(&trust_file).unwrap();
+                let mut params = HashMap::new();
+                if let Some(wl) = walk_length {
+                    params.insert("walk_length".to_string(), wl.to_string());
+                }
+                if let Some(nw) = num_walks {
+                    params.insert("num_walks".to_string(), nw.to_string());
+                }
+                let job_description =
+                    JobDescription::new(trust_id, trust_file, seed_id.clone(), 2, params);
+                jds.push(job_description);
+            }
+
+            let meta_id = upload_meta(client, jds).await?;
+            let meta_id_bytes = FixedBytes::from_hex(meta_id.clone()).unwrap();
+
+            // Get the return value (computeId) from the transaction
+            let compute_id = manager_contract
+                .submitMetaComputeRequest(meta_id_bytes)
+                .call()
+                .await
+                .unwrap();
+
+            let pending_tx = manager_contract
+                .submitMetaComputeRequest(meta_id_bytes)
+                .send()
+                .await
+                .unwrap();
+            let receipt = pending_tx.get_receipt().await.unwrap();
+            let tx_hash = receipt.transaction_hash;
+
+            info!("Meta Job ID: {}", meta_id);
+            info!("Tx Hash: {}", tx_hash);
+            info!("Compute ID: {}", compute_id);
+
+            println!("{}", compute_id);
+        }
+        Method::ComputeLocalEt {
             trust_path,
             seed_path,
             out_dir,
@@ -374,6 +478,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 wtr.write_record(&["i", "v"]).unwrap();
                 for x in scores_vec {
                     wtr.write_record(&[x.id(), x.value().to_string().as_str()])
+                        .unwrap();
+                }
+                let res = wtr.into_inner().unwrap();
+                println!("{:?}", String::from_utf8(res));
+            }
+        }
+        Method::ComputeLocalSr {
+            trust_path,
+            seed_path,
+            out_dir,
+            walk_length,
+            num_walks,
+        } => {
+            let f = File::open(trust_path).unwrap();
+            let trust_entries = parse_trust_entries_from_file(f).unwrap();
+
+            // Read CSV, to get a list of `ScoreEntry`
+            let f = File::open(seed_path).unwrap();
+            let seed_entries = parse_score_entries_from_file(f).unwrap();
+
+            let mut scores_vec =
+                compute_local_sr(&trust_entries, &seed_entries, walk_length, num_walks)
+                    .await
+                    .unwrap();
+
+            // Sort scores by value in descending order (highest scores first)
+            scores_vec.sort_by(|a, b| {
+                b.value()
+                    .partial_cmp(a.value())
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            if let Some(out_dir) = out_dir {
+                let path = format!("{}/scores.csv", out_dir);
+                let mut wtr = csv::Writer::from_path(path).unwrap();
+                wtr.write_record(&["id", "value"]).unwrap();
+
+                for entry in scores_vec {
+                    wtr.write_record(&[entry.id(), entry.value().to_string().as_str()])
+                        .unwrap();
+                }
+                wtr.flush().unwrap();
+
+                println!("SybilRank scores saved to {}/scores.csv", out_dir);
+            } else {
+                let mut wtr = csv::Writer::from_writer(vec![]);
+                wtr.write_record(&["id", "value"]).unwrap();
+                for entry in scores_vec {
+                    wtr.write_record(&[entry.id(), entry.value().to_string().as_str()])
                         .unwrap();
                 }
                 let res = wtr.into_inner().unwrap();

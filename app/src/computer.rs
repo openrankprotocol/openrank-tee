@@ -28,158 +28,184 @@ use std::time::{Duration, Instant};
 use tokio::fs::create_dir_all;
 use tracing::{debug, error, info};
 
-async fn handle_meta_compute_request<PH: Provider>(
-    contract: &OpenRankManagerInstance<PH>,
+struct MetaComputeHandler {
     s3_client: Client,
     bucket_name: String,
-    meta_compute_req: MetaComputeRequestEvent,
-    log: Log,
-) -> Result<(), NodeError> {
-    let start = Instant::now();
-    let meta_job: Vec<JobDescription> = download_meta(
-        &s3_client,
-        &bucket_name,
-        meta_compute_req.jobDescriptionId.encode_hex(),
-    )
-    .await?;
-    info!(
-        "MetaComputeRequestEvent: ComputeId({})",
-        meta_compute_req.computeId.to_string()
-    );
-    debug!("Log: {:?}", log);
+    meta_job: Vec<JobDescription>,
+    job_results: Vec<JobResult>,
+    commitments: Vec<Hash>,
+}
 
-    // Create directories for data storage
-    create_dir_all(&format!("./trust/"))
-        .await
-        .map_err(|e| NodeError::FileError(format!("Failed to create trust directory: {}", e)))?;
-    create_dir_all(&format!("./seed/"))
-        .await
-        .map_err(|e| NodeError::FileError(format!("Failed to create seed directory: {}", e)))?;
-    create_dir_all("./scores/")
-        .await
-        .map_err(|e| NodeError::FileError(format!("Failed to create scores directory: {}", e)))?;
+impl MetaComputeHandler {
+    async fn new(
+        s3_client: Client,
+        bucket_name: String,
+        meta_compute_req: &MetaComputeRequestEvent,
+    ) -> Result<Self, NodeError> {
+        let meta_job: Vec<JobDescription> = download_meta(
+            &s3_client,
+            &bucket_name,
+            meta_compute_req.jobDescriptionId.encode_hex(),
+        )
+        .await?;
 
-    // STAGE 1: Download all data files in parallel
-    info!("STAGE 1: Downloading all data files in parallel...");
-
-    let download_tasks: Vec<_> = meta_job
-        .iter()
-        .map(|compute_req| {
-            let s3_client = s3_client.clone();
-            let bucket_name = bucket_name.clone();
-            let trust_id = compute_req.trust_id.clone();
-            let seed_id = compute_req.seed_id.clone();
-            let trust_id_bytes =
-                FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
-            let seed_id_bytes =
-                FixedBytes::<32>::from_slice(hex::decode(seed_id.clone()).unwrap().as_slice());
-
-            tokio::spawn(async move {
-                let trust_file_path = format!("./trust/{}", trust_id);
-                let seed_file_path = format!("./seed/{}", seed_id);
-
-                // Check if trust file already exists
-                let (trust_result, trust_downloaded) =
-                    if tokio::fs::metadata(&trust_file_path).await.is_ok() {
-                        info!(
-                            "Trust file already exists, skipping download: TrustId({:#})",
-                            trust_id_bytes
-                        );
-                        (Ok(()), false)
-                    } else {
-                        info!("Downloading data: TrustId({:#})", trust_id_bytes);
-                        (
-                            download_trust_data_to_file(
-                                &s3_client,
-                                &bucket_name,
-                                &trust_id,
-                                &trust_file_path,
-                            )
-                            .await,
-                            true,
-                        )
-                    };
-
-                // Check if seed file already exists
-                let (seed_result, seed_downloaded) =
-                    if tokio::fs::metadata(&seed_file_path).await.is_ok() {
-                        info!("Skipping download: SeedId({:#})", seed_id_bytes);
-                        (Ok(()), false)
-                    } else {
-                        info!("Downloading data: SeedId({:#})", seed_id);
-                        (
-                            download_seed_data_to_file(
-                                &s3_client,
-                                &bucket_name,
-                                &seed_id,
-                                &seed_file_path,
-                            )
-                            .await,
-                            true,
-                        )
-                    };
-
-                // Return results with download status
-                (
-                    trust_result,
-                    seed_result,
-                    trust_downloaded,
-                    seed_downloaded,
-                    trust_id,
-                    seed_id,
-                )
-            })
+        Ok(Self {
+            s3_client,
+            bucket_name,
+            meta_job,
+            job_results: Vec::new(),
+            commitments: Vec::new(),
         })
-        .collect();
-
-    // Wait for all downloads to complete
-    let download_results = futures_util::future::join_all(download_tasks).await;
-
-    // Check for errors and count downloads vs skips
-    let mut trust_downloads = 0;
-    let mut seed_downloads = 0;
-
-    for result in download_results {
-        let (trust_result, seed_result, trust_downloaded, seed_downloaded, trust_id, seed_id) =
-            result.map_err(|e| NodeError::TxError(format!("Download task failed: {}", e)))?;
-
-        trust_result.map_err(|e| {
-            NodeError::FileError(format!(
-                "Failed to download trust data for {}: {}",
-                trust_id, e
-            ))
-        })?;
-        seed_result.map_err(|e| {
-            NodeError::FileError(format!(
-                "Failed to download seed data for {}: {}",
-                seed_id, e
-            ))
-        })?;
-
-        if trust_downloaded {
-            trust_downloads += 1;
-        }
-        if seed_downloaded {
-            seed_downloads += 1;
-        }
     }
 
-    let trust_skips = meta_job.len() - trust_downloads;
-    let seed_skips = meta_job.len() - seed_downloads;
+    async fn download_data(&self) -> Result<(), NodeError> {
+        // Create directories for data storage
+        create_dir_all(&format!("./trust/")).await.map_err(|e| {
+            NodeError::FileError(format!("Failed to create trust directory: {}", e))
+        })?;
+        create_dir_all(&format!("./seed/"))
+            .await
+            .map_err(|e| NodeError::FileError(format!("Failed to create seed directory: {}", e)))?;
+        create_dir_all("./scores/").await.map_err(|e| {
+            NodeError::FileError(format!("Failed to create scores directory: {}", e))
+        })?;
 
-    info!(
-        "STAGE 1 complete: Trust files (downloaded: {}, skipped: {}), Seed files (downloaded: {}, skipped: {})",
-        trust_downloads, trust_skips, seed_downloads, seed_skips
-    );
+        info!("STAGE 1: Downloading all data files in parallel...");
 
-    // STAGE 2: Compute scores and save to CSV files in parallel
-    info!("STAGE 2: Computing scores and saving to CSV files in parallel...");
+        let download_tasks: Vec<_> = self
+            .meta_job
+            .iter()
+            .map(|compute_req| {
+                let s3_client = self.s3_client.clone();
+                let bucket_name = self.bucket_name.clone();
+                let trust_id = compute_req.trust_id.clone();
+                let seed_id = compute_req.seed_id.clone();
+                let trust_id_bytes =
+                    FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
+                let seed_id_bytes =
+                    FixedBytes::<32>::from_slice(hex::decode(seed_id.clone()).unwrap().as_slice());
 
-    let mut job_results = Vec::new();
-    let mut commitments = Vec::new();
-    for compute_req in meta_job {
+                tokio::spawn(async move {
+                    let trust_file_path = format!("./trust/{}", trust_id);
+                    let seed_file_path = format!("./seed/{}", seed_id);
+
+                    // Check if trust file already exists
+                    let (trust_result, trust_downloaded) =
+                        if tokio::fs::metadata(&trust_file_path).await.is_ok() {
+                            info!(
+                                "Trust file already exists, skipping download: TrustId({:#})",
+                                trust_id_bytes
+                            );
+                            (Ok(()), false)
+                        } else {
+                            info!("Downloading data: TrustId({:#})", trust_id_bytes);
+                            (
+                                download_trust_data_to_file(
+                                    &s3_client,
+                                    &bucket_name,
+                                    &trust_id,
+                                    &trust_file_path,
+                                )
+                                .await,
+                                true,
+                            )
+                        };
+
+                    // Check if seed file already exists
+                    let (seed_result, seed_downloaded) =
+                        if tokio::fs::metadata(&seed_file_path).await.is_ok() {
+                            info!("Skipping download: SeedId({:#})", seed_id_bytes);
+                            (Ok(()), false)
+                        } else {
+                            info!("Downloading data: SeedId({:#})", seed_id);
+                            (
+                                download_seed_data_to_file(
+                                    &s3_client,
+                                    &bucket_name,
+                                    &seed_id,
+                                    &seed_file_path,
+                                )
+                                .await,
+                                true,
+                            )
+                        };
+
+                    // Return results with download status
+                    (
+                        trust_result,
+                        seed_result,
+                        trust_downloaded,
+                        seed_downloaded,
+                        trust_id,
+                        seed_id,
+                    )
+                })
+            })
+            .collect();
+
+        // Wait for all downloads to complete
+        let download_results = futures_util::future::join_all(download_tasks).await;
+
+        // Check for errors and count downloads vs skips
+        let mut trust_downloads = 0;
+        let mut seed_downloads = 0;
+
+        for result in download_results {
+            let (trust_result, seed_result, trust_downloaded, seed_downloaded, trust_id, seed_id) =
+                result.map_err(|e| NodeError::TxError(format!("Download task failed: {}", e)))?;
+
+            trust_result.map_err(|e| {
+                NodeError::FileError(format!(
+                    "Failed to download trust data for {}: {}",
+                    trust_id, e
+                ))
+            })?;
+            seed_result.map_err(|e| {
+                NodeError::FileError(format!(
+                    "Failed to download seed data for {}: {}",
+                    seed_id, e
+                ))
+            })?;
+
+            if trust_downloaded {
+                trust_downloads += 1;
+            }
+            if seed_downloaded {
+                seed_downloads += 1;
+            }
+        }
+
+        let trust_skips = self.meta_job.len() - trust_downloads;
+        let seed_skips = self.meta_job.len() - seed_downloads;
+
+        info!(
+            "STAGE 1 complete: Trust files (downloaded: {}, skipped: {}), Seed files (downloaded: {}, skipped: {})",
+            trust_downloads, trust_skips, seed_downloads, seed_skips
+        );
+
+        Ok(())
+    }
+
+    async fn perform_compute(&mut self) -> Result<(), NodeError> {
+        info!("STAGE 2: Computing scores and saving to CSV files in parallel...");
+
+        for compute_req in &self.meta_job {
+            let job_result = self.compute_single_job(compute_req).await?;
+            self.job_results.push(job_result.0);
+            self.commitments.push(job_result.1);
+        }
+
+        info!("STAGE 2 complete: All scores computed and saved to CSV files in parallel");
+        Ok(())
+    }
+
+    async fn compute_single_job(
+        &self,
+        compute_req: &JobDescription,
+    ) -> Result<(JobResult, Hash), NodeError> {
         let trust_id = compute_req.trust_id.clone();
         let seed_id = compute_req.seed_id.clone();
+
         let trust_id_bytes =
             FixedBytes::<32>::from_slice(hex::decode(trust_id.clone()).unwrap().as_slice());
         let seed_id_bytes =
@@ -198,26 +224,7 @@ async fn handle_meta_compute_request<PH: Provider>(
         let trust_entries = parse_trust_entries_from_file(trust_file)?;
         let seed_entries = parse_score_entries_from_file(seed_file)?;
 
-        // Core compute operations
-        let mut runner = ComputeRunner::new();
-        runner
-            .update_trust_map(trust_entries.to_vec())
-            .map_err(NodeError::ComputeRunnerError)?;
-        runner
-            .update_seed_map(seed_entries.to_vec())
-            .map_err(NodeError::ComputeRunnerError)?;
-        runner
-            .compute_et(compute_req.alpha, compute_req.delta)
-            .map_err(NodeError::ComputeRunnerError)?;
-        let scores = runner
-            .get_compute_scores()
-            .map_err(NodeError::ComputeRunnerError)?;
-        runner
-            .create_compute_tree()
-            .map_err(NodeError::ComputeRunnerError)?;
-        let compute_root = runner
-            .get_root_hash()
-            .map_err(NodeError::ComputeRunnerError)?;
+        let (scores, compute_root) = self.core_compute(compute_req, trust_entries, seed_entries)?;
 
         // Create CSV file and compute hash
         let (file_bytes, scores_id) = create_csv_and_hash_from_scores(scores)?;
@@ -241,89 +248,183 @@ async fn handle_meta_compute_request<PH: Provider>(
             scores_id_bytes, commitment_bytes
         );
 
-        job_results.push(job_result);
-        commitments.push(Hash::from_slice(commitment_bytes.as_slice()));
+        Ok((job_result, Hash::from_slice(commitment_bytes.as_slice())))
     }
 
-    info!("STAGE 2 complete: All scores computed and saved to CSV files in parallel");
+    async fn upload_data(&self) -> Result<(), NodeError> {
+        info!("STAGE 3: Uploading all scores files to S3 in parallel...");
 
-    // STAGE 3: Upload all scores files to S3 in parallel
-    info!("STAGE 3: Uploading all scores files to S3 in parallel...");
+        let upload_tasks: Vec<_> = self
+            .job_results
+            .iter()
+            .map(|job_result| {
+                let s3_client = self.s3_client.clone();
+                let bucket_name = self.bucket_name.clone();
+                let scores_id = job_result.scores_id.clone();
+                let scores_id_bytes = FixedBytes::<32>::from_slice(
+                    hex::decode(scores_id.clone()).unwrap().as_slice(),
+                );
 
-    let upload_tasks: Vec<_> = job_results
-        .iter()
-        .map(|job_result| {
-            let s3_client = s3_client.clone();
-            let bucket_name = bucket_name.clone();
-            let scores_id = job_result.scores_id.clone();
-            let scores_id_bytes =
-                FixedBytes::<32>::from_slice(hex::decode(scores_id.clone()).unwrap().as_slice());
+                tokio::spawn(async move {
+                    info!("Uploading scores data for ScoresId({:#})", scores_id_bytes);
 
-            tokio::spawn(async move {
-                info!("Uploading scores data for ScoresId({:#})", scores_id_bytes);
+                    let scores_file_path = format!("./scores/{}.csv", scores_id);
+                    let upload_result = upload_file_to_s3_streaming(
+                        &s3_client,
+                        &bucket_name,
+                        &format!("scores/{}", scores_id),
+                        &scores_file_path,
+                    )
+                    .await
+                    .map_err(|e| {
+                        NodeError::FileError(format!("Failed to upload scores file: {}", e))
+                    });
 
-                let scores_file_path = format!("./scores/{}.csv", scores_id);
-                let upload_result = upload_file_to_s3_streaming(
-                    &s3_client,
-                    &bucket_name,
-                    &format!("scores/{}", scores_id),
-                    &scores_file_path,
-                )
-                .await
-                .map_err(|e| NodeError::FileError(format!("Failed to upload scores file: {}", e)));
+                    if upload_result.is_ok() {
+                        info!("Upload complete for ScoresId({:#})", scores_id_bytes);
+                    }
 
-                if upload_result.is_ok() {
-                    info!("Upload complete for ScoresId({:#})", scores_id_bytes);
-                }
-
-                upload_result.map(|_| scores_id.clone())
+                    upload_result.map(|_| scores_id.clone())
+                })
             })
-        })
-        .collect();
+            .collect();
 
-    // Wait for all uploads to complete
-    let upload_results = futures_util::future::join_all(upload_tasks).await;
+        // Wait for all uploads to complete
+        let upload_results = futures_util::future::join_all(upload_tasks).await;
 
-    // Check for errors
-    for result in upload_results {
-        let upload_result =
-            result.map_err(|e| NodeError::TxError(format!("Upload task failed: {}", e)))?;
-        upload_result
-            .map_err(|e| NodeError::FileError(format!("Failed to upload scores file: {}", e)))?;
+        // Check for errors
+        for result in upload_results {
+            let upload_result =
+                result.map_err(|e| NodeError::TxError(format!("Upload task failed: {}", e)))?;
+            upload_result.map_err(|e| {
+                NodeError::FileError(format!("Failed to upload scores file: {}", e))
+            })?;
+        }
+
+        info!("STAGE 3 complete: All scores files uploaded to S3 in parallel");
+        Ok(())
     }
 
-    info!("STAGE 3 complete: All scores files uploaded to S3 in parallel");
+    async fn create_commitment_and_post_onchain<PH: Provider>(
+        &self,
+        contract: &OpenRankManagerInstance<PH>,
+        compute_id: alloy::primitives::Uint<256, 4>,
+    ) -> Result<(), NodeError> {
+        let commitment_tree = DenseMerkleTree::<Keccak256>::new(self.commitments.clone())
+            .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
+        let meta_commitment = commitment_tree
+            .root()
+            .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
 
-    let commitment_tree = DenseMerkleTree::<Keccak256>::new(commitments)
-        .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
-    let meta_commitment = commitment_tree
-        .root()
-        .map_err(|e| NodeError::ComputeRunnerError(runner::Error::Merkle(e)))?;
+        let meta_id =
+            upload_meta(&self.s3_client, &self.bucket_name, self.job_results.clone()).await?;
 
-    let meta_id = upload_meta(&s3_client, &bucket_name, job_results).await?;
+        let meta_commitment_bytes = FixedBytes::from_slice(meta_commitment.inner());
+        let meta_id_bytes = FixedBytes::from_slice(
+            hex::decode(meta_id)
+                .map_err(|e| NodeError::HexError(e))?
+                .as_slice(),
+        );
 
-    let meta_commitment_bytes = FixedBytes::from_slice(meta_commitment.inner());
-    let meta_id_bytes = FixedBytes::from_slice(
-        hex::decode(meta_id)
-            .map_err(|e| NodeError::HexError(e))?
-            .as_slice(),
-    );
+        info!("Posting commitment on-chain. Calling: 'submitMetaComputeResult'");
+        let res = contract
+            .submitMetaComputeResult(compute_id, meta_commitment_bytes, meta_id_bytes)
+            .send()
+            .await
+            .map_err(|e| NodeError::TxError(format!("{e:}")))?;
+        let tx_hash = *res.tx_hash();
+        info!(
+            "'submitMetaComputeResult' submitted: Tx Hash({:#})",
+            tx_hash
+        );
 
-    info!("Posting commitment on-chain. Calling: 'submitMetaComputeResult'");
-    let res = contract
-        .submitMetaComputeResult(
-            meta_compute_req.computeId,
-            meta_commitment_bytes,
-            meta_id_bytes,
-        )
-        .send()
-        .await
-        .map_err(|e| NodeError::TxError(format!("{e:}")))?;
-    let tx_hash = *res.tx_hash();
+        Ok(())
+    }
+
+    fn core_compute(
+        &self,
+        compute_req: &JobDescription,
+        trust_entries: Vec<openrank_common::TrustEntry>,
+        seed_entries: Vec<openrank_common::ScoreEntry>,
+    ) -> Result<(Vec<openrank_common::ScoreEntry>, Hash), NodeError> {
+        let mut runner = ComputeRunner::new();
+        runner
+            .update_trust_map(trust_entries.to_vec())
+            .map_err(NodeError::ComputeRunnerError)?;
+        runner
+            .update_seed_map(seed_entries.to_vec())
+            .map_err(NodeError::ComputeRunnerError)?;
+
+        // Check algo_id and call appropriate algorithm
+        match compute_req.algo_id {
+            1 => {
+                // EigenTrust algorithm
+                let alpha = compute_req.params.get("alpha").and_then(|s| s.parse().ok());
+                let delta = compute_req.params.get("delta").and_then(|s| s.parse().ok());
+                runner
+                    .compute_et(alpha, delta)
+                    .map_err(NodeError::ComputeRunnerError)?;
+            }
+            2 => {
+                // SybilRank algorithm
+                let walk_length = compute_req
+                    .params
+                    .get("walk_length")
+                    .and_then(|s| s.parse().ok());
+                let num_walks = compute_req
+                    .params
+                    .get("num_walks")
+                    .and_then(|s| s.parse().ok());
+                runner
+                    .compute_sr(walk_length, num_walks)
+                    .map_err(NodeError::ComputeRunnerError)?;
+            }
+            _ => {
+                return Err(NodeError::ComputeRunnerError(
+                    openrank_common::runner::Error::Misc(format!(
+                        "Unsupported algorithm ID: {}",
+                        compute_req.algo_id
+                    )),
+                ));
+            }
+        }
+
+        let scores = runner
+            .get_compute_scores()
+            .map_err(NodeError::ComputeRunnerError)?;
+        runner
+            .create_compute_tree()
+            .map_err(NodeError::ComputeRunnerError)?;
+        let compute_root = runner
+            .get_root_hash()
+            .map_err(NodeError::ComputeRunnerError)?;
+
+        Ok((scores, compute_root))
+    }
+}
+
+async fn handle_meta_compute_request<PH: Provider>(
+    contract: &OpenRankManagerInstance<PH>,
+    s3_client: Client,
+    bucket_name: String,
+    meta_compute_req: MetaComputeRequestEvent,
+    log: Log,
+) -> Result<(), NodeError> {
+    let start = Instant::now();
+
     info!(
-        "'submitMetaComputeResult' submitted: Tx Hash({:#})",
-        tx_hash
+        "MetaComputeRequestEvent: ComputeId({})",
+        meta_compute_req.computeId.to_string()
     );
+    debug!("Log: {:?}", log);
+
+    let mut handler = MetaComputeHandler::new(s3_client, bucket_name, &meta_compute_req).await?;
+    handler.download_data().await?;
+    handler.perform_compute().await?;
+    handler.upload_data().await?;
+    handler
+        .create_commitment_and_post_onchain(contract, meta_compute_req.computeId)
+        .await?;
 
     let elapsed = start.elapsed();
     info!("Total compute time: {:?}", elapsed);

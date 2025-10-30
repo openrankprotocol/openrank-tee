@@ -9,7 +9,7 @@ use alloy_rlp::{BufMut, Decodable, Encodable, Error as RlpError, Result as RlpRe
 use csv::StringRecord;
 use getset::Getters;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Read};
+use std::{collections::HashMap, fs::File, io::Read};
 
 pub fn format_hex(hex: String) -> String {
     if hex.len() < 8 {
@@ -101,8 +101,8 @@ pub struct JobDescription {
     pub name: String,
     pub trust_id: String,
     pub seed_id: String,
-    pub alpha: Option<f32>,
-    pub delta: Option<f32>,
+    pub algo_id: u32,
+    pub params: HashMap<String, String>,
 }
 
 impl JobDescription {
@@ -110,15 +110,15 @@ impl JobDescription {
         name: String,
         trust_id: String,
         seed_id: String,
-        alpha: Option<f32>,
-        delta: Option<f32>,
+        algo_id: u32,
+        params: HashMap<String, String>,
     ) -> Self {
         Self {
             name,
             trust_id,
             seed_id,
-            alpha,
-            delta,
+            algo_id,
+            params,
         }
     }
 }

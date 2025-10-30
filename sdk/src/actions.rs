@@ -235,6 +235,20 @@ pub async fn compute_local(
     Ok(scores)
 }
 
+pub async fn compute_local_sr(
+    trust_entries: &[TrustEntry],
+    seed_entries: &[ScoreEntry],
+    walk_length: Option<u32>,
+    num_walks: Option<u32>,
+) -> Result<Vec<ScoreEntry>, runner::Error> {
+    let mut runner = ComputeRunner::new();
+    runner.update_trust_map(trust_entries.to_vec())?;
+    runner.update_seed_map(seed_entries.to_vec())?;
+    runner.compute_sr(walk_length, num_walks)?;
+    let scores = runner.get_compute_scores()?;
+    Ok(scores)
+}
+
 pub fn save_json_to_file<T: Serialize>(data: T, file: &Path) -> Result<(), std::io::Error> {
     let file = File::create(file.to_path_buf())?;
     let mut writer = BufWriter::new(file);
