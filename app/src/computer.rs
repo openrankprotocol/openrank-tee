@@ -492,7 +492,10 @@ pub async fn run<PH: Provider>(
         )
         .await
         {
+            finished_jobs.remove(&res.data().computeId);
             error!("Error handling meta compute request: {}", e);
+        } else {
+            finished_jobs.insert(res.data().computeId);
         }
     }
 
@@ -569,7 +572,10 @@ pub async fn run<PH: Provider>(
             )
             .await
             {
+                finished_jobs.remove(&res.data().computeId);
                 error!("Error handling meta compute request: {}", e);
+            } else {
+                finished_jobs.insert(res.data().computeId);
             }
         }
 

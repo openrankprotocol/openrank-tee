@@ -14,7 +14,7 @@ use openrank_common::logs::setup_tracing;
 use tracing::info;
 
 const BUCKET_NAME: &str = "openrank-data-dev";
-const BLOCK_HISTORY: u64 = 100;
+const BLOCK_HISTORY: u64 = 1000;
 const LOG_PULL_INTERVAL_SECONDS: u64 = 10;
 
 #[tokio::main]
