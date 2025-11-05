@@ -1,0 +1,14 @@
+{
+  "contracts/lib/eigenlayer-middleware": {
+    "rev": "6b4255aa7423b492069c48f6520ebabb2ce58f3c"
+  },
+  "contracts/lib/openzeppelin-contracts-upgradeable": {
+    "rev": "e725abddf1e01cf05ace496e950fc8e243cc7cab"
+  },
+  "contracts/lib/openzeppelin-foundry-upgrades": {
+    "rev": "cbce1e00305e943aa1661d43f41e5ac72c662b07"
+  },
+  "datasets": {
+    "rev": "b8b3de023ce4a7c96599b647fe9a8bd48294a6fd"
+  }
+}

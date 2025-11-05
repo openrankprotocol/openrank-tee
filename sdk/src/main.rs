@@ -78,7 +78,7 @@ enum Method {
         trust_path: String,
         seed_path: String,
         #[arg(long)]
-        out_dir: Option<String>,
+        out_path: Option<String>,
         #[arg(long)]
         alpha: Option<f32>,
         #[arg(long)]
@@ -89,7 +89,7 @@ enum Method {
         trust_path: String,
         seed_path: String,
         #[arg(long)]
-        out_dir: Option<String>,
+        out_path: Option<String>,
         #[arg(long)]
         walk_length: Option<u32>,
         #[arg(long)]
@@ -438,7 +438,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Method::ComputeLocalEt {
             trust_path,
             seed_path,
-            out_dir,
+            out_path,
             alpha,
             delta,
         } => {
@@ -460,7 +460,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            if let Some(output_path) = out_dir {
+            if let Some(output_path) = out_path {
                 // Create parent directories if they don't exist
                 if let Some(parent) = std::path::Path::new(&output_path).parent() {
                     create_dir_all(parent).await.unwrap();
@@ -487,7 +487,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Method::ComputeLocalSr {
             trust_path,
             seed_path,
-            out_dir,
+            out_path,
             walk_length,
             num_walks,
         } => {
@@ -510,9 +510,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
 
-            if let Some(out_dir) = out_dir {
-                let path = format!("{}/scores.csv", out_dir);
-                let mut wtr = csv::Writer::from_path(path).unwrap();
+            if let Some(output_path) = out_path {
+                let mut wtr = csv::Writer::from_path(output_path.clone()).unwrap();
                 wtr.write_record(&["id", "value"]).unwrap();
 
                 for entry in scores_vec {
@@ -521,7 +520,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 wtr.flush().unwrap();
 
-                println!("SybilRank scores saved to {}/scores.csv", out_dir);
+                println!("SybilRank scores saved to {}", output_path);
             } else {
                 let mut wtr = csv::Writer::from_writer(vec![]);
                 wtr.write_record(&["id", "value"]).unwrap();
