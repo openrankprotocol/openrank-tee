@@ -371,12 +371,8 @@ impl MetaComputeHandler {
                     .params
                     .get("walk_length")
                     .and_then(|s| s.parse().ok());
-                let num_walks = compute_req
-                    .params
-                    .get("num_walks")
-                    .and_then(|s| s.parse().ok());
                 runner
-                    .compute_sr(walk_length, num_walks)
+                    .compute_sr(walk_length)
                     .map_err(NodeError::ComputeRunnerError)?;
             }
             _ => {

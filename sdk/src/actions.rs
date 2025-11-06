@@ -239,12 +239,11 @@ pub async fn compute_local_sr(
     trust_entries: &[TrustEntry],
     seed_entries: &[ScoreEntry],
     walk_length: Option<u32>,
-    num_walks: Option<u32>,
 ) -> Result<Vec<ScoreEntry>, runner::Error> {
     let mut runner = ComputeRunner::new();
     runner.update_trust_map(trust_entries.to_vec())?;
     runner.update_seed_map(seed_entries.to_vec())?;
-    runner.compute_sr(walk_length, num_walks)?;
+    runner.compute_sr(walk_length)?;
     let scores = runner.get_compute_scores()?;
     Ok(scores)
 }

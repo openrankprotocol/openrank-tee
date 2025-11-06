@@ -10,9 +10,6 @@ use crate::runner::OutboundLocalTrust;
 /// The number of random walk steps to perform in the Sybil Rank algorithm.
 const WALK_LENGTH: u32 = 10;
 
-/// The number of random walks to perform from each seed node.
-const NUM_WALKS: u32 = 1000;
-
 fn find_reachable_peers(
     lt: &BTreeMap<u64, OutboundLocalTrust>,
     seed: &BTreeMap<u64, f32>,
@@ -143,14 +140,11 @@ pub fn sybil_rank_run(
     mut seed: BTreeMap<u64, f32>,
     count: u64,
     walk_length: Option<u32>,
-    num_walks: Option<u32>,
 ) -> Vec<(u64, f32)> {
     let start = Instant::now();
     let walk_len = walk_length.unwrap_or(WALK_LENGTH);
-    let walks = num_walks.unwrap_or(NUM_WALKS);
 
     info!("WALK_LENGTH: {}", walk_len);
-    info!("NUM_WALKS: {}", walks);
     info!(
         "PRE_PROCESS_START, LT_SIZE: {}, SEED_SIZE: {}",
         lt.len(),
@@ -172,42 +166,22 @@ pub fn sybil_rank_run(
     info!("SYBIL_RANK_START");
     let start = Instant::now();
 
-    // Accumulate landing probabilities across all walks
-    let mut accumulated_scores: BTreeMap<u64, f32> = BTreeMap::new();
+    // Compute the probability distribution after walk_len steps
+    let mut current_scores = seed.clone();
 
-    for walk_id in 0..walks {
-        let mut current_scores = seed.clone();
-
-        // Perform exactly walk_len steps - no convergence checking
-        for _step in 0..walk_len {
-            current_scores = fixed_walk_step(&lt, &current_scores);
-            current_scores = normalise_scores(&current_scores);
-        }
-
-        // Accumulate the final scores after exactly walk_len steps
-        for (node, score) in current_scores {
-            *accumulated_scores.entry(node).or_insert(0.0) += score;
-        }
-
-        if (walk_id + 1) % 100 == 0 {
-            info!("COMPLETED_WALKS: {}/{}", walk_id + 1, walks);
-        }
+    // Perform exactly walk_len steps - no convergence checking
+    for _step in 0..walk_len {
+        current_scores = fixed_walk_step(&lt, &current_scores);
+        current_scores = normalise_scores(&current_scores);
     }
 
-    // Average the accumulated scores
-    let final_scores: BTreeMap<u64, f32> = accumulated_scores
-        .into_iter()
-        .map(|(node, total_score)| (node, total_score / walks as f32))
-        .collect();
-
-    let final_scores = normalise_scores(&final_scores);
+    let final_scores = normalise_scores(&current_scores);
 
     info!(
-        "SYBIL_RANK_END: {:?}, NUM_SCORES: {}, WALK_LENGTH: {}, NUM_WALKS: {}",
+        "SYBIL_RANK_END: {:?}, NUM_SCORES: {}, WALK_LENGTH: {}",
         start.elapsed(),
         final_scores.len(),
-        walk_len,
-        walks
+        walk_len
     );
 
     final_scores.into_iter().collect()

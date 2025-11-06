@@ -208,18 +208,13 @@ impl ComputeRunner {
     }
 
     /// Compute the SybilRank scores.
-    pub fn compute_sr(
-        &mut self,
-        walk_length: Option<u32>,
-        num_walks: Option<u32>,
-    ) -> Result<(), Error> {
+    pub fn compute_sr(&mut self, walk_length: Option<u32>) -> Result<(), Error> {
         info!("COMPUTE_RUN_SR");
         let res = sybil_rank_run(
             self.local_trust.clone(),
             self.seed_trust.clone(),
             self.count,
             walk_length,
-            num_walks,
         );
         self.compute_results = res;
         Ok(())

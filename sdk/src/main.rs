@@ -70,8 +70,6 @@ enum Method {
         seed_folder_path: String,
         #[arg(long)]
         walk_length: Option<u32>,
-        #[arg(long)]
-        num_walks: Option<u32>,
     },
     #[command(about = "Compute OpenRank scores locally using trust and seed data")]
     ComputeLocalEt {
@@ -92,8 +90,6 @@ enum Method {
         out_path: Option<String>,
         #[arg(long)]
         walk_length: Option<u32>,
-        #[arg(long)]
-        num_walks: Option<u32>,
     },
     #[command(about = "Initialize a new OpenRank project configuration")]
     Init { path: String },
@@ -362,7 +358,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             trust_folder_path,
             seed_folder_path,
             walk_length,
-            num_walks,
         } => {
             let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
             let wallet = MnemonicBuilder::<English>::default()
@@ -402,9 +397,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let mut params = HashMap::new();
                 if let Some(wl) = walk_length {
                     params.insert("walk_length".to_string(), wl.to_string());
-                }
-                if let Some(nw) = num_walks {
-                    params.insert("num_walks".to_string(), nw.to_string());
                 }
                 let job_description =
                     JobDescription::new(trust_id, trust_file, seed_id.clone(), 2, params);
@@ -489,7 +481,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             seed_path,
             out_path,
             walk_length,
-            num_walks,
         } => {
             let f = File::open(trust_path).unwrap();
             let trust_entries = parse_trust_entries_from_file(f).unwrap();
@@ -498,10 +489,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let f = File::open(seed_path).unwrap();
             let seed_entries = parse_score_entries_from_file(f).unwrap();
 
-            let mut scores_vec =
-                compute_local_sr(&trust_entries, &seed_entries, walk_length, num_walks)
-                    .await
-                    .unwrap();
+            let mut scores_vec = compute_local_sr(&trust_entries, &seed_entries, walk_length)
+                .await
+                .unwrap();
 
             // Sort scores by value in descending order (highest scores first)
             scores_vec.sort_by(|a, b| {
