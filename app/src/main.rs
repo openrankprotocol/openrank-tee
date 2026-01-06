@@ -8,14 +8,15 @@ use alloy::transports::http::reqwest::Url;
 use aws_config::from_env;
 use aws_sdk_s3::Client;
 use dotenv::dotenv;
-use openrank_app::computer;
 use openrank_app::sol::OpenRankManager;
+use openrank_app::{computer, server};
 use openrank_common::logs::setup_tracing;
 use tracing::info;
 
 const BUCKET_NAME: &str = "openrank-data-dev";
 const BLOCK_HISTORY: u64 = 1000;
 const LOG_PULL_INTERVAL_SECONDS: u64 = 10;
+const SERVER_PORT: u16 = 3000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,6 +48,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let manager_address = Address::from_hex(manager_address)
         .map_err(|e| format!("Failed to parse manager address: {}", e))?;
     let manager_contract = OpenRankManager::new(manager_address, provider_http.clone());
+
+    // Start the server in a background thread
+    let server_addr = std::net::SocketAddr::from(([0, 0, 0, 0], SERVER_PORT));
+    tokio::spawn(async move {
+        info!("Starting score-proof server on {}", server_addr);
+        if let Err(e) = server::run_server(server_addr).await {
+            eprintln!("Server failed: {}", e);
+        }
+    });
 
     if let Err(e) = computer::run(
         manager_contract,

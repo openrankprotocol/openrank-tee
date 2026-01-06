@@ -31,6 +31,7 @@ base64 = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 rustls = { workspace = true }
+reqwest = { workspace = true }
 flate2 = { workspace = true }
 curl = { workspace = true }
 tar = { workspace = true }

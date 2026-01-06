@@ -95,6 +95,8 @@ enum Method {
     Init { path: String },
     #[command(about = "Display the current OpenRank manager contract address")]
     ShowManagerAddress,
+    #[command(about = "Verify a score proof from the server against the smart contract")]
+    VerifyScoreProof { compute_id: String, user_id: String },
 }
 
 #[derive(Parser, Debug)]
@@ -631,6 +633,109 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Method::ShowManagerAddress => {
             println!("{}", manager_address);
+        }
+        Method::VerifyScoreProof {
+            compute_id,
+            user_id,
+        } => {
+            let server_url = option_env!("OPENRANK_SERVER_URL")
+                .map(|s| s.to_string())
+                .or_else(|| std::env::var("OPENRANK_SERVER_URL").ok())
+                .unwrap_or_else(|| "http://localhost:3000".to_string());
+
+            let mnemonic = std::env::var("MNEMONIC").expect("MNEMONIC must be set.");
+            let wallet = MnemonicBuilder::<English>::default()
+                .phrase(mnemonic)
+                .index(0)
+                .unwrap()
+                .build()
+                .unwrap();
+            let provider = ProviderBuilder::new()
+                .wallet(wallet)
+                .connect_client(RpcClient::new_http(Url::parse(&rpc_url).unwrap()));
+            let manager_contract = OpenRankManager::new(manager_address, provider.clone());
+
+            // Call the server to get the proof
+            let proof_url = format!(
+                "{}/score-proof?compute_id={}&user_id={}",
+                server_url, compute_id, user_id
+            );
+            info!("Fetching proof from: {}", proof_url);
+
+            let http_client = reqwest::Client::new();
+            let response = http_client
+                .get(&proof_url)
+                .send()
+                .await
+                .expect("Failed to fetch proof from server");
+
+            if !response.status().is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                eprintln!("Server error: {}", error_text);
+                return Ok(());
+            }
+
+            let proof: serde_json::Value = response
+                .json()
+                .await
+                .expect("Failed to parse proof response");
+
+            info!("Received proof: {:?}", proof);
+
+            // Extract proof fields
+            let score = proof["score"].as_f64().expect("Missing score") as f32;
+            let score_bytes: [u8; 4] = score.to_be_bytes();
+            let score_index = proof["score_index"].as_u64().expect("Missing score_index") as usize;
+            let meta_index = proof["meta_index"].as_u64().expect("Missing meta_index") as usize;
+
+            let scores_tree_path: Vec<FixedBytes<32>> = proof["scores_tree_path"]
+                .as_array()
+                .expect("Missing scores_tree_path")
+                .iter()
+                .map(|h| {
+                    let hex_str = h.as_str().expect("Invalid hash");
+                    FixedBytes::from_hex(hex_str).expect("Invalid hex")
+                })
+                .collect();
+
+            let scores_tree_root: FixedBytes<32> = FixedBytes::from_hex(
+                proof["scores_tree_root"]
+                    .as_str()
+                    .expect("Missing scores_tree_root"),
+            )
+            .expect("Invalid scores_tree_root hex");
+
+            let meta_tree_path: Vec<FixedBytes<32>> = proof["meta_tree_path"]
+                .as_array()
+                .expect("Missing meta_tree_path")
+                .iter()
+                .map(|h| {
+                    let hex_str = h.as_str().expect("Invalid hash");
+                    FixedBytes::from_hex(hex_str).expect("Invalid hex")
+                })
+                .collect();
+
+            // Call the smart contract to verify
+            let compute_id_uint = Uint::<256, 4>::from_str(&compute_id).unwrap();
+            let score_bytes_fixed = FixedBytes::<4>::from_slice(&score_bytes);
+
+            let result = manager_contract
+                .verifyScoreProof(
+                    compute_id_uint,
+                    score_bytes_fixed,
+                    Uint::<256, 4>::from(score_index),
+                    scores_tree_path,
+                    scores_tree_root,
+                    Uint::<256, 4>::from(meta_index),
+                    meta_tree_path,
+                )
+                .call()
+                .await
+                .expect("Failed to call verifyScoreProof");
+
+            println!("User: {}", user_id);
+            println!("Score: {}", score);
+            println!("Verification result: {}", result);
         }
     };
 

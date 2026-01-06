@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import {OpenRankManagerStorage} from "./OpenRankManagerStorage.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {MerklePathVerifier} from "./MerklePathVerifier.sol";
 
 contract OpenRankManager is OpenRankManagerStorage {
     function initialize() public initializer {
@@ -17,7 +17,7 @@ contract OpenRankManager is OpenRankManagerStorage {
         __UUPSUpgradeable_init();
     }
 
-    function _authorizeUpgrade(address) internal override onlyOwner { }
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
     // ---------------------------------------------------------------
     // Meta Jobs
@@ -47,8 +47,14 @@ contract OpenRankManager is OpenRankManagerStorage {
         bytes32 resultsId
     ) external returns (bool) {
         require(allowlistedComputers[msg.sender], CallerNotWhitelisted());
-        require(metaComputeRequests[computeId].id != 0, ComputeRequestNotFound());
-        require(metaComputeResults[computeId].computeId == 0, ComputeResultAlreadySubmitted());
+        require(
+            metaComputeRequests[computeId].id != 0,
+            ComputeRequestNotFound()
+        );
+        require(
+            metaComputeResults[computeId].computeId == 0,
+            ComputeResultAlreadySubmitted()
+        );
 
         MetaComputeResult memory computeResult = MetaComputeResult({
             computer: msg.sender,
@@ -69,10 +75,17 @@ contract OpenRankManager is OpenRankManagerStorage {
         uint32 subJobId
     ) external returns (bool) {
         require(allowlistedChallengers[msg.sender], CallerNotWhitelisted());
-        require(metaComputeRequests[computeId].id != 0, ComputeRequestNotFound());
-        require(metaComputeResults[computeId].computeId != 0, ComputeResultNotFound());
+        require(
+            metaComputeRequests[computeId].id != 0,
+            ComputeRequestNotFound()
+        );
+        require(
+            metaComputeResults[computeId].computeId != 0,
+            ComputeResultNotFound()
+        );
 
-        uint256 computeDiff = block.timestamp - metaComputeResults[computeId].timestamp;
+        uint256 computeDiff = block.timestamp -
+            metaComputeResults[computeId].timestamp;
         require(computeDiff <= CHALLENGE_WINDOW, ChallengePeriodExpired());
 
         MetaChallenge memory challenge = MetaChallenge({
@@ -84,6 +97,63 @@ contract OpenRankManager is OpenRankManagerStorage {
         metaChallenges[computeId] = challenge;
 
         emit MetaChallengeEvent(computeId, subJobId);
+        return true;
+    }
+
+    // ---------------------------------------------------------------
+    // Verification
+    // ---------------------------------------------------------------
+
+    /// @notice Verifies a score inclusion proof from the score-proof server
+    /// @param computeId The compute ID to verify against
+    /// @param scoreBytes The score value as bytes4 (f32 in big-endian format)
+    /// @param scoreIndex The index of the score in the scores tree
+    /// @param scoresTreePath The Merkle path for the score in the scores tree
+    /// @param scoresTreeRoot The root of the scores tree (job commitment)
+    /// @param metaIndex The index of the job commitment in the meta tree
+    /// @param metaTreePath The Merkle path for the commitment in the meta tree
+    /// @return True if the proof is valid and matches the on-chain commitment
+    function verifyScoreProof(
+        uint256 computeId,
+        bytes4 scoreBytes,
+        uint256 scoreIndex,
+        bytes32[] calldata scoresTreePath,
+        bytes32 scoresTreeRoot,
+        uint256 metaIndex,
+        bytes32[] calldata metaTreePath
+    ) external view returns (bool) {
+        require(
+            metaComputeResults[computeId].computeId != 0,
+            ComputeResultNotFound()
+        );
+
+        bytes32 metaTreeRoot = metaComputeResults[computeId].metaCommitment;
+
+        // Verify score is included in the scores tree
+        bytes32 scoreLeaf = MerklePathVerifier.hashScoreLeaf(scoreBytes);
+        if (
+            !MerklePathVerifier.verifyPath(
+                scoreLeaf,
+                scoreIndex,
+                scoresTreePath,
+                scoresTreeRoot
+            )
+        ) {
+            return false;
+        }
+
+        // Verify scores tree root (commitment) is included in the meta tree
+        if (
+            !MerklePathVerifier.verifyPath(
+                scoresTreeRoot,
+                metaIndex,
+                metaTreePath,
+                metaTreeRoot
+            )
+        ) {
+            return false;
+        }
+
         return true;
     }
 
@@ -101,21 +171,19 @@ contract OpenRankManager is OpenRankManagerStorage {
     // Setters
     // ---------------------------------------------------------------
 
-    function updateChallengeWindow(
-        uint64 challengeWindow
-    ) public onlyOwner {
+    function updateChallengeWindow(uint64 challengeWindow) public onlyOwner {
         CHALLENGE_WINDOW = challengeWindow;
     }
 
-    function allowlistUser(address user) onlyOwner external {
+    function allowlistUser(address user) external onlyOwner {
         allowlistedUsers[user] = true;
     }
 
-    function allowlistComputer(address computer) onlyOwner external {
+    function allowlistComputer(address computer) external onlyOwner {
         allowlistedComputers[computer] = true;
     }
 
-    function allowlistChallenger(address challenger) onlyOwner external {
+    function allowlistChallenger(address challenger) external onlyOwner {
         allowlistedChallengers[challenger] = true;
     }
 }

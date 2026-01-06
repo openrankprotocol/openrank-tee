@@ -1,5 +1,6 @@
 pub mod computer;
 pub mod error;
+pub mod server;
 pub mod sol;
 
 pub use crate::error::Error;
